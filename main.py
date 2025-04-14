@@ -24,16 +24,12 @@ async def main():
         # Hent miljøvariabler
         TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
         TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-        BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
-        BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY")
 
         # Valider miljøvariabler
-        if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, BINANCE_API_KEY, BINANCE_SECRET_KEY]):
+        if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID]):
             missing = [var for var, val in [
                 ("TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN),
-                ("TELEGRAM_CHAT_ID", TELEGRAM_CHAT_ID),
-                ("BINANCE_API_KEY", BINANCE_API_KEY),
-                ("BINANCE_SECRET_KEY", BINANCE_SECRET_KEY)
+                ("TELEGRAM_CHAT_ID", TELEGRAM_CHAT_ID)
             ] if not val]
             logger.error(f"Missing environment variables: {missing}")
             sys.exit(1)
@@ -46,11 +42,10 @@ async def main():
         await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text="🤖 Bot started, scanning 12 coins...")
         logger.info("Connected to Telegram.")
 
-        # Koble til Binance testnet
+        # Koble til live Binance API (uten API-nøkler, siden vi kun henter offentlige data)
         logger.info("Connecting to Binance...")
         exchange = ccxt.binance({
             'enableRateLimit': True,
-            'testnet': True,
             'adjustForTimeDifference': True
         })
         logger.info("Connected to Binance.")
