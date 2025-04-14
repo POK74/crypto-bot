@@ -49,7 +49,7 @@ async def main():
         logger.info("Connecting to Binance...")
         exchange = ccxt.binance({
             'enableRateLimit': True,
-            'testnet': True,  # Bruk innebygd testnet-støtte
+            'testnet': True,
             'adjustForTimeDifference': True
         })
         logger.info("Connected to Binance.")
