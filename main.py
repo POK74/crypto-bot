@@ -105,12 +105,12 @@ async def main():
                     # Logg prisendring og RSI
                     logger.info(f"{coin}: Price change from start {price_change:.2f}% over {time_diff_minutes:.1f} minutes, RSI {rsi:.2f}")
                     
-                    # Sjekk betingelser: 3% stigning fra start innen 1 time
-                    if price_change >= 3 and time_diff_minutes <= 60 and rsi < 70:
+                    # Sjekk betingelser: 2% stigning fra start innen 1 time
+                    if price_change >= 2 and time_diff_minutes <= 60 and rsi < 80:
                         entry = current_price
                         target = entry * 1.08  # 8% take profit
                         stop = entry * 0.96    # 4% stop loss
-                        message = (f"Buy {coin.split('/')[0]}, 3% breakout at ${entry:.2f} over {time_diff_minutes:.1f} minutes\n"
+                        message = (f"Buy {coin.split('/')[0]}, 2% breakout at ${entry:.2f} over {time_diff_minutes:.1f} minutes\n"
                                    f"Trade opened: Entry ${entry:.2f}, Target ${target:.2f}, Stop ${stop:.2f}")
                         await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
                         logger.info(f"Signal sent for {coin}: {message}")
@@ -121,8 +121,8 @@ async def main():
                 # Legg til en liten forsinkelse for å unngå rate-limiting
                 await asyncio.sleep(0.5)  # 0.5 sekunder mellom hver mynt
             
-            logger.info("Completed one scan cycle. Waiting 60 seconds...")
-            await asyncio.sleep(60)
+            logger.info("Completed one scan cycle. Waiting 30 seconds...")
+            await asyncio.sleep(30)  # Redusert fra 60 til 30 sekunder
 
     except Exception as e:
         logger.error(f"Fatal error: {str(e)}")
