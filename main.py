@@ -63,15 +63,27 @@ async def main():
         while True:
             for coin in coins:
                 try:
-                    # Hent OHLCV-data
-                    ohlcv = exchange.fetch_ohlcv(coin, timeframe='5m', limit=15)  # Endret til 5m
+                    # Hent OHLCV-data for siste 60 minutter
+                    ohlcv = exchange.fetch_ohlcv(coin, timeframe='1m', limit=60)  # 60 minutter
                     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
                     
-                    # Beregn breakout
-                    last_close = df['close'].iloc[-1]
-                    prev_close = df['close'].iloc[-2]
-                    breakout = last_close / prev_close >= 1.005  # 0.5% breakout
-                    price_change = (last_close / prev_close - 1) * 100  # % endring
+                    # Konverter timestamp til lesbar tid (valgfritt for logging)
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                    
+                    # Finn laveste pris i perioden
+                    lowest_price = df['low'].min()
+                    lowest_price_idx = df['low'].idxmin()
+                    lowest_timestamp = df['timestamp'].iloc[lowest_price_idx]
+                    
+                    # Nåværende pris
+                    current_price = df['close'].iloc[-1]
+                    current_timestamp = df['timestamp'].iloc[-1]
+                    
+                    # Beregn prisendring fra laveste punkt
+                    price_change = (current_price / lowest_price - 1) * 100  # % endring
+                    
+                    # Beregn tidsforskjell (i minutter) fra laveste punkt til nå
+                    time_diff_minutes = (current_timestamp - lowest_timestamp).total_seconds() / 60
                     
                     # Beregn RSI
                     df['rsi'] = ta.momentum.RSIIndicator(df['close']).rsi()
@@ -83,14 +95,14 @@ async def main():
                         continue
                     
                     # Logg prisendring og RSI
-                    logger.info(f"{coin}: Price change {price_change:.2f}%, RSI {rsi:.2f}")
+                    logger.info(f"{coin}: Price change from low {price_change:.2f}% over {time_diff_minutes:.1f} minutes, RSI {rsi:.2f}")
                     
-                    # Sjekk betingelser
-                    if breakout and rsi < 75:
-                        entry = last_close
+                    # Sjekk betingelser: 3% stigning innen 1 time
+                    if price_change >= 3 and time_diff_minutes <= 60 and rsi < 75:
+                        entry = current_price
                         target = entry * 1.08  # 8% take profit
                         stop = entry * 0.96    # 4% stop loss
-                        message = (f"Buy {coin.split('/')[0]}, 0.5% breakout at ${entry:.2f}\n"
+                        message = (f"Buy {coin.split('/')[0]}, 3% breakout at ${entry:.2f} over {time_diff_minutes:.1f} minutes\n"
                                    f"Trade opened: Entry ${entry:.2f}, Target ${target:.2f}, Stop ${stop:.2f}")
                         await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
                         logger.info(f"Signal sent for {coin}: {message}")
