@@ -84,20 +84,19 @@ async def main():
                     # Konverter timestamp til lesbar tid
                     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
                     
-                    # Finn laveste pris i perioden
-                    lowest_price = df['low'].min()
-                    lowest_price_idx = df['low'].idxmin()
-                    lowest_timestamp = df['timestamp'].iloc[lowest_price_idx]
+                    # Pris ved starten av perioden (første lys)
+                    start_price = df['close'].iloc[0]
+                    start_timestamp = df['timestamp'].iloc[0]
                     
                     # Nåværende pris og tid
                     current_price = df['close'].iloc[-1]
                     current_timestamp = df['timestamp'].iloc[-1]
                     
-                    # Beregn prisendring fra laveste punkt
-                    price_change = (current_price / lowest_price - 1) * 100  # % endring
+                    # Beregn prisendring fra startprisen
+                    price_change = (current_price / start_price - 1) * 100  # % endring
                     
-                    # Beregn tidsforskjell (i minutter) fra laveste punkt til nå
-                    time_diff_minutes = (current_timestamp - lowest_timestamp).total_seconds() / 60
+                    # Beregn tidsforskjell (i minutter) fra start til nå
+                    time_diff_minutes = (current_timestamp - start_timestamp).total_seconds() / 60
                     
                     # Beregn RSI
                     df['rsi'] = ta.momentum.RSIIndicator(df['close']).rsi()
@@ -109,10 +108,10 @@ async def main():
                         continue
                     
                     # Logg prisendring og RSI
-                    logger.info(f"{coin}: Price change from low {price_change:.2f}% over {time_diff_minutes:.1f} minutes, RSI {rsi:.2f}")
+                    logger.info(f"{coin}: Price change from start {price_change:.2f}% over {time_diff_minutes:.1f} minutes, RSI {rsi:.2f}")
                     
-                    # Sjekk betingelser: 3% stigning innen 1 time
-                    if price_change >= 3 and time_diff_minutes <= 60 and rsi < 70:  # Redusert RSI-terskel
+                    # Sjekk betingelser: 3% stigning fra start innen 1 time
+                    if price_change >= 3 and time_diff_minutes <= 60 and rsi < 70:
                         entry = current_price
                         target = entry * 1.08  # 8% take profit
                         stop = entry * 0.96    # 4% stop loss
