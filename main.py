@@ -82,4 +82,23 @@ async def main():
                         entry = last_close
                         target = entry * 1.08  # 8% take profit
                         stop = entry * 0.96    # 4% stop loss
-                        message = (f"Buy {coin.split('/')[0]}, 3% breakout at ${entry
+                        message = (f"Buy {coin.split('/')[0]}, 3% breakout at ${entry:.2f}\n"
+                                   f"Trade opened: Entry ${entry:.2f}, Target ${target:.2f}, Stop ${stop:.2f}")
+                        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+                        logger.info(f"Signal sent for {coin}: {message}")
+                except Exception as e:
+                    logger.error(f"Error scanning {coin}: {str(e)}")
+                
+                # Legg til en liten forsinkelse for å unngå rate-limiting
+                await asyncio.sleep(0.5)  # 0.5 sekunder mellom hver mynt
+            
+            logger.info("Completed one scan cycle. Waiting 60 seconds...")
+            await asyncio.sleep(60)
+
+    except Exception as e:
+        logger.error(f"Fatal error: {str(e)}")
+        sys.exit(1)
+
+# Kjør asynkron hovedfunksjon
+if __name__ == "__main__":
+    asyncio.run(main())
