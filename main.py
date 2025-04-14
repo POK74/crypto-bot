@@ -118,13 +118,13 @@ async def main():
         })
         logger.info("Connected to Binance.")
 
-        # Oppdatert myntliste: 30 mynter med høy volatilitet
+        # Oppdatert myntliste: fjernet SATS/USDT, lagt til ORDI/USDT
         coins = ["SOL/USDT", "AVAX/USDT", "DOGE/USDT", "SHIB/USDT", "ADA/USDT", 
                  "XRP/USDT", "JASMY/USDT", "FLOKI/USDT", "PEPE/USDT", "API3/USDT", 
                  "BONK/USDT", "WIF/USDT", "POPCAT/USDT", "NEIRO/USDT", "TURBO/USDT", 
-                 "SATS/USDT", "MEME/USDT", "BOME/USDT", "TON/USDT", "SUI/USDT", 
-                 "APT/USDT", "LINK/USDT", "DOT/USDT", "MATIC/USDT", "NEAR/USDT", 
-                 "RUNE/USDT", "INJ/USDT", "FTM/USDT", "GALA/USDT", "HBAR/USDT"]
+                 "MEME/USDT", "BOME/USDT", "TON/USDT", "SUI/USDT", "APT/USDT", 
+                 "LINK/USDT", "DOT/USDT", "MATIC/USDT", "NEAR/USDT", "RUNE/USDT", 
+                 "INJ/USDT", "FTM/USDT", "GALA/USDT", "HBAR/USDT", "ORDI/USDT"]
 
         # Dictionary for å holde styr på cooldown for hver mynt
         signal_cooldown = {coin: None for coin in coins}
