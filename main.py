@@ -55,7 +55,7 @@ async def main():
         })
         logger.info("Connected to Binance.")
 
-        # Myntliste (fjernet XCN/USDT)
+        # Myntliste
         coins = ["SOL/USDT", "AVAX/USDT", "DOGE/USDT", "SHIB/USDT", "ADA/USDT", 
                  "XRP/USDT", "JASMY/USDT", "BTC/USDT", "ETH/USDT", "FLOKI/USDT", 
                  "PEPE/USDT", "API3/USDT"]
@@ -82,20 +82,4 @@ async def main():
                         entry = last_close
                         target = entry * 1.08  # 8% take profit
                         stop = entry * 0.96    # 4% stop loss
-                        message = (f"Buy {coin.split('/')[0]}, 3% breakout at ${entry:.2f}\n"
-                                  f"Trade opened: Entry ${entry:.2f}, Target ${target:.2f}, Stop ${stop:.2f}")
-                        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-                        logger.info(f"Signal sent for {coin}: {message}")
-                except Exception as e:
-                    logger.error(f"Error scanning {coin}: {str(e)}")
-            
-            logger.info("Completed one scan cycle. Waiting 60 seconds...")
-            await asyncio.sleep(60)
-
-    except Exception as e:
-        logger.error(f"Fatal error: {str(e)}")
-        sys.exit(1)
-
-# Kjør asynkron hovedfunksjon
-if __name__ == "__main__":
-    asyncio.run(main())
+                        message = (f"Buy {coin.split('/')[0]}, 3% breakout at ${entry
