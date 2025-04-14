@@ -64,17 +64,21 @@ async def main():
             for coin in coins:
                 try:
                     # Hent OHLCV-data
-                    ohlcv = exchange.fetch_ohlcv(coin, timeframe='1m', limit=2)
+                    ohlcv = exchange.fetch_ohlcv(coin, timeframe='1m', limit=15)  # Økt til 15 lys
                     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
                     
                     # Beregn breakout
                     last_close = df['close'].iloc[-1]
                     prev_close = df['close'].iloc[-2]
                     breakout = last_close / prev_close >= 1.03  # 3% breakout
+                    price_change = (last_close / prev_close - 1) * 100  # % endring
                     
                     # Beregn RSI
                     df['rsi'] = ta.momentum.RSIIndicator(df['close']).rsi()
                     rsi = df['rsi'].iloc[-1]
+                    
+                    # Logg prisendring og RSI
+                    logger.info(f"{coin}: Price change {price_change:.2f}%, RSI {rsi:.2f}")
                     
                     # Sjekk betingelser
                     if breakout and rsi < 75:
