@@ -51,7 +51,9 @@ async def main():
             'apiKey': BINANCE_API_KEY,
             'secret': BINANCE_SECRET_KEY,
             'enableRateLimit': True,
-            'testnet': True
+            'urls': {
+                'api': 'https://testnet.binance.vision'
+            }
         })
         logger.info("Connected to Binance.")
 
