@@ -5,12 +5,12 @@ from telegram import Bot
 import asyncio
 import os
 
-# Telegram config (your bot’s details)
+# Telegram config
 BOT_TOKEN = "8012533338:AAGnD3KP5-YWvi-4xhQb849dDGMk_4pHbJQ"
 CHAT_ID = 5613251713
 bot = Bot(token=BOT_TOKEN)
 
-# Binance testnet setup
+# Binance testnet
 exchange = ccxt.binance({
     "enableRateLimit": True,
     "apiKey": os.getenv("BINANCE_API_KEY"),
@@ -18,16 +18,16 @@ exchange = ccxt.binance({
 })
 exchange.set_sandbox_mode(True)
 
-# 13 coins to trade
+# Coins and settings
 COINS = [
     "SOL/USDT", "AVAX/USDT", "DOGE/USDT", "SHIB/USDT", "ADA/USDT",
     "XRP/USDT", "JASMY/USDT", "BTC/USDT", "ETH/USDT", "FLOKI/USDT",
     "PEPE/USDT", "API3/USDT", "XCN/USDT"
 ]
-ENTRY_SIZE = 150  # USD per trade
-BREAKOUT = 0.03  # 3% price jump
-TAKE_PROFIT = 0.08  # 8% profit target
-TRAIL_STOP = 0.04  # 4% stop loss
+ENTRY_SIZE = 150
+BREAKOUT = 0.03
+TAKE_PROFIT = 0.08
+TRAIL_STOP = 0.04
 
 async def send_signal(message):
     await bot.send_message(chat_id=CHAT_ID, text=message)
@@ -54,12 +54,11 @@ async def main():
             if signal and signal["rsi"] < 75:
                 msg = f"Buy {symbol.split('/')[0]}, 3% breakout at ${signal['price']:.6f}"
                 await send_signal(msg)
-                # Simulate trade (paper trading)
                 entry_price = signal["price"]
                 target_price = entry_price * (1 + TAKE_PROFIT)
                 stop_price = entry_price * (1 - TRAIL_STOP)
                 await send_signal(f"Trade opened: Entry ${entry_price:.6f}, Target ${target_price:.6f}, Stop ${stop_price:.6f}")
-        await asyncio.sleep(60)  # Check every 60 seconds
+        await asyncio.sleep(60)
 
 if __name__ == "__main__":
     asyncio.run(main())
