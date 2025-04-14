@@ -29,8 +29,8 @@ BREAKOUT = 0.03
 TAKE_PROFIT = 0.08
 TRAIL_STOP = 0.04
 
-async def send_signal(message):
-    await bot.send_message(chat_id=CHAT_ID, text=message)
+def send_signal(message):
+    bot.send_message(chat_id=CHAT_ID, text=message)  # Removed 'await'
 
 def get_breakout_signal(symbol):
     try:
@@ -47,18 +47,18 @@ def get_breakout_signal(symbol):
         return None
 
 async def main():
-    await send_signal("🤖 Bot started, scanning 13 coins...")
+    send_signal("🤖 Bot started, scanning 13 coins...")  # Removed 'await'
     while True:
         for symbol in COINS:
             signal = get_breakout_signal(symbol)
             if signal and signal["rsi"] < 75:
                 msg = f"Buy {symbol.split('/')[0]}, 3% breakout at ${signal['price']:.6f}"
-                await send_signal(msg)
+                send_signal(msg)  # Removed 'await'
                 entry_price = signal["price"]
                 target_price = entry_price * (1 + TAKE_PROFIT)
                 stop_price = entry_price * (1 - TRAIL_STOP)
-                await send_signal(f"Trade opened: Entry ${entry_price:.6f}, Target ${target_price:.6f}, Stop ${stop_price:.6f}")
-        await asyncio.sleep(60)
+                send_signal(f"Trade opened: Entry ${entry_price:.6f}, Target ${target_price:.6f}, Stop ${stop_price:.6f}")
+        await asyncio.sleep(60)  # Keep 'await' for asyncio.sleep
 
 if __name__ == "__main__":
     asyncio.run(main())
