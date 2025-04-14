@@ -45,13 +45,11 @@ async def main():
         await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text="🤖 Bot started, scanning 12 coins...")
         logger.info("Connected to Telegram.")
 
-        # Koble til Binance testnet (uten API-nøkler for markedsdata)
+        # Koble til Binance testnet
         logger.info("Connecting to Binance...")
         exchange = ccxt.binance({
             'enableRateLimit': True,
-            'urls': {
-                'api': 'https://testnet.binance.vision'
-            },
+            'testnet': True,  # Bruk innebygd testnet-støtte
             'adjustForTimeDifference': True
         })
         logger.info("Connected to Binance.")
