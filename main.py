@@ -7,6 +7,7 @@ import ta
 import time
 import asyncio
 from telegram import Bot
+from datetime import datetime, timedelta
 
 # Sett opp logging først
 logging.basicConfig(
@@ -59,15 +60,28 @@ async def main():
                  "XRP/USDT", "JASMY/USDT", "BTC/USDT", "ETH/USDT", "FLOKI/USDT", 
                  "PEPE/USDT", "API3/USDT"]
 
+        # Dictionary for å holde styr på cooldown for hver mynt
+        signal_cooldown = {coin: None for coin in coins}
+        COOLDOWN_MINUTES = 60  # 1 time cooldown
+
         # Hovedløkke
         while True:
             for coin in coins:
                 try:
+                    # Sjekk om mynten er i cooldown
+                    if signal_cooldown[coin]:
+                        time_since_signal = (datetime.utcnow() - signal_cooldown[coin]).total_seconds() / 60
+                        if time_since_signal < COOLDOWN_MINUTES:
+                            logger.info(f"{coin}: In cooldown, {COOLDOWN_MINUTES - time_since_signal:.1f} minutes remaining")
+                            continue
+                        else:
+                            signal_cooldown[coin] = None  # Reset cooldown
+
                     # Hent OHLCV-data for siste 60 minutter
                     ohlcv = exchange.fetch_ohlcv(coin, timeframe='1m', limit=60)  # 60 minutter
                     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
                     
-                    # Konverter timestamp til lesbar tid (valgfritt for logging)
+                    # Konverter timestamp til lesbar tid
                     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
                     
                     # Finn laveste pris i perioden
@@ -75,7 +89,7 @@ async def main():
                     lowest_price_idx = df['low'].idxmin()
                     lowest_timestamp = df['timestamp'].iloc[lowest_price_idx]
                     
-                    # Nåværende pris
+                    # Nåværende pris og tid
                     current_price = df['close'].iloc[-1]
                     current_timestamp = df['timestamp'].iloc[-1]
                     
@@ -98,7 +112,7 @@ async def main():
                     logger.info(f"{coin}: Price change from low {price_change:.2f}% over {time_diff_minutes:.1f} minutes, RSI {rsi:.2f}")
                     
                     # Sjekk betingelser: 3% stigning innen 1 time
-                    if price_change >= 3 and time_diff_minutes <= 60 and rsi < 75:
+                    if price_change >= 3 and time_diff_minutes <= 60 and rsi < 70:  # Redusert RSI-terskel
                         entry = current_price
                         target = entry * 1.08  # 8% take profit
                         stop = entry * 0.96    # 4% stop loss
@@ -106,6 +120,7 @@ async def main():
                                    f"Trade opened: Entry ${entry:.2f}, Target ${target:.2f}, Stop ${stop:.2f}")
                         await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
                         logger.info(f"Signal sent for {coin}: {message}")
+                        signal_cooldown[coin] = datetime.utcnow()  # Sett cooldown
                 except Exception as e:
                     logger.error(f"Error scanning {coin}: {str(e)}")
                 
