@@ -107,7 +107,7 @@ async def main():
         # Koble til Telegram
         logger.info("Connecting to Telegram...")
         bot = Bot(token=TELEGRAM_BOT_TOKEN)
-        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text="🤖 Bot started, scanning 12 coins and news...")
+        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text="🤖 Bot started, scanning 30 coins and news...")
         logger.info("Connected to Telegram.")
 
         # Koble til live Binance API
@@ -118,10 +118,13 @@ async def main():
         })
         logger.info("Connected to Binance.")
 
-        # Myntliste
+        # Oppdatert myntliste: 30 mynter med høy volatilitet
         coins = ["SOL/USDT", "AVAX/USDT", "DOGE/USDT", "SHIB/USDT", "ADA/USDT", 
-                 "XRP/USDT", "JASMY/USDT", "FLOKI/USDT", "PEPE/USDT", "API3/USDT",
-                 "BONK/USDT", "WIF/USDT"]
+                 "XRP/USDT", "JASMY/USDT", "FLOKI/USDT", "PEPE/USDT", "API3/USDT", 
+                 "BONK/USDT", "WIF/USDT", "POPCAT/USDT", "NEIRO/USDT", "TURBO/USDT", 
+                 "SATS/USDT", "MEME/USDT", "BOME/USDT", "TON/USDT", "SUI/USDT", 
+                 "APT/USDT", "LINK/USDT", "DOT/USDT", "MATIC/USDT", "NEAR/USDT", 
+                 "RUNE/USDT", "INJ/USDT", "FTM/USDT", "GALA/USDT", "HBAR/USDT"]
 
         # Dictionary for å holde styr på cooldown for hver mynt
         signal_cooldown = {coin: None for coin in coins}
@@ -143,8 +146,8 @@ async def main():
                         else:
                             signal_cooldown[coin] = None
 
-                    # Hent OHLCV-data for siste 30 minutter
-                    ohlcv = exchange.fetch_ohlcv(coin, timeframe='1m', limit=30)
+                    # Hent OHLCV-data for siste 15 minutter
+                    ohlcv = exchange.fetch_ohlcv(coin, timeframe='1m', limit=15)  # 15 minutter
                     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
                     
                     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
@@ -165,11 +168,11 @@ async def main():
                     
                     logger.info(f"{coin}: Price change from start {price_change:.2f}% over {time_diff_minutes:.1f} minutes, RSI {rsi:.2f}")
                     
-                    if price_change >= 2 and time_diff_minutes <= 30 and rsi < 80:
+                    if price_change >= 2.5 and time_diff_minutes <= 15 and rsi < 80:  # 2.5% over 15 minutter
                         entry = current_price
                         target = entry * 1.08
                         stop = entry * 0.96
-                        message = (f"Buy {coin.split('/')[0]}, 2% breakout at ${entry:.2f} over {time_diff_minutes:.1f} minutes\n"
+                        message = (f"Buy {coin.split('/')[0]}, 2.5% breakout at ${entry:.2f} over {time_diff_minutes:.1f} minutes\n"
                                    f"Trade opened: Entry ${entry:.2f}, Target ${target:.2f}, Stop ${stop:.2f}")
                         await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
                         logger.info(f"Signal sent for {coin}: {message}")
