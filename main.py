@@ -50,10 +50,10 @@ async def main():
         })
         logger.info("Connected to Binance.")
 
-        # Myntliste
+        # Oppdatert myntliste: fjernet BTC/USDT og ETH/USDT, lagt til BONK/USDT og WIF/USDT
         coins = ["SOL/USDT", "AVAX/USDT", "DOGE/USDT", "SHIB/USDT", "ADA/USDT", 
-                 "XRP/USDT", "JASMY/USDT", "BTC/USDT", "ETH/USDT", "FLOKI/USDT", 
-                 "PEPE/USDT", "API3/USDT"]
+                 "XRP/USDT", "JASMY/USDT", "FLOKI/USDT", "PEPE/USDT", "API3/USDT",
+                 "BONK/USDT", "WIF/USDT"]
 
         # Dictionary for å holde styr på cooldown for hver mynt
         signal_cooldown = {coin: None for coin in coins}
@@ -72,8 +72,8 @@ async def main():
                         else:
                             signal_cooldown[coin] = None  # Reset cooldown
 
-                    # Hent OHLCV-data for siste 60 minutter
-                    ohlcv = exchange.fetch_ohlcv(coin, timeframe='1m', limit=60)  # 60 minutter
+                    # Hent OHLCV-data for siste 30 minutter (redusert fra 60)
+                    ohlcv = exchange.fetch_ohlcv(coin, timeframe='1m', limit=30)  # 30 minutter
                     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
                     
                     # Konverter timestamp til lesbar tid
@@ -105,8 +105,8 @@ async def main():
                     # Logg prisendring og RSI
                     logger.info(f"{coin}: Price change from start {price_change:.2f}% over {time_diff_minutes:.1f} minutes, RSI {rsi:.2f}")
                     
-                    # Sjekk betingelser: 2% stigning fra start innen 1 time
-                    if price_change >= 2 and time_diff_minutes <= 60 and rsi < 80:
+                    # Sjekk betingelser: 2% stigning fra start innen 30 minutter
+                    if price_change >= 2 and time_diff_minutes <= 30 and rsi < 80:
                         entry = current_price
                         target = entry * 1.08  # 8% take profit
                         stop = entry * 0.96    # 4% stop loss
@@ -122,7 +122,7 @@ async def main():
                 await asyncio.sleep(0.5)  # 0.5 sekunder mellom hver mynt
             
             logger.info("Completed one scan cycle. Waiting 30 seconds...")
-            await asyncio.sleep(30)  # Redusert fra 60 til 30 sekunder
+            await asyncio.sleep(30)
 
     except Exception as e:
         logger.error(f"Fatal error: {str(e)}")
