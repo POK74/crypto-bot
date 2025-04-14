@@ -1,64 +1,95 @@
-import ccxt
 import pandas as pd
-import ta
-from telegram import Bot
-import asyncio
+import logging
+import sys
 import os
+import telegram
+import ccxt
+import ta
+import time
 
-# Telegram config
-BOT_TOKEN = "8012533338:AAGnD3KP5-YWvi-4xhQb849dDGMk_4pHbJQ"
-CHAT_ID = 5613251713
-bot = Bot(token=BOT_TOKEN)
+# Sett opp logging først
+logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-# Binance testnet
-exchange = ccxt.binance({
-    "enableRateLimit": True,
-    "apiKey": os.getenv("BINANCE_API_KEY"),
-    "secret": os.getenv("BINANCE_SECRET_KEY")
-})
-exchange.set_sandbox_mode(True)
+logger.info("Starting bot...")
 
-# Coins and settings
-COINS = [
-    "SOL/USDT", "AVAX/USDT", "DOGE/USDT", "SHIB/USDT", "ADA/USDT",
-    "XRP/USDT", "JASMY/USDT", "BTC/USDT", "ETH/USDT", "FLOKI/USDT",
-    "PEPE/USDT", "API3/USDT", "XCN/USDT"
-]
-ENTRY_SIZE = 150
-BREAKOUT = 0.03
-TAKE_PROFIT = 0.08
-TRAIL_STOP = 0.04
+try:
+    # Hent miljøvariabler
+    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+    BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
+    BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY")
 
-def send_signal(message):
-    bot.send_message(chat_id=CHAT_ID, text=message)  # Removed 'await'
+    # Valider miljøvariabler
+    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, BINANCE_API_KEY, BINANCE_SECRET_KEY]):
+        missing = [var for var, val in [
+            ("TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN),
+            ("TELEGRAM_CHAT_ID", TELEGRAM_CHAT_ID),
+            ("BINANCE_API_KEY", BINANCE_API_KEY),
+            ("BINANCE_SECRET_KEY", BINANCE_SECRET_KEY)
+        ] if not val]
+        logger.error(f"Missing environment variables: {missing}")
+        sys.exit(1)
 
-def get_breakout_signal(symbol):
-    try:
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe="5m", limit=20)
-        df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
-        df["rsi"] = ta.momentum.RSIIndicator(df["close"]).rsi()
-        last_close = df["close"].iloc[-1]
-        prev_close = df["close"].iloc[-2]
-        if (last_close / prev_close - 1) >= BREAKOUT:
-            return {"symbol": symbol, "price": last_close, "rsi": df["rsi"].iloc[-1]}
-        return None
-    except Exception as e:
-        print(f"Error scanning {symbol}: {e}")
-        return None
+    logger.info("Environment variables loaded successfully.")
 
-async def main():
-    send_signal("🤖 Bot started, scanning 13 coins...")  # Removed 'await'
+    # Koble til Telegram
+    logger.info("Connecting to Telegram...")
+    bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
+    bot.send_message(chat_id=TELEGRAM_CHAT_ID, text="🤖 Bot started, scanning 13 coins...")
+    logger.info("Connected to Telegram.")
+
+    # Koble til Binance testnet
+    logger.info("Connecting to Binance...")
+    exchange = ccxt.binance({
+        'apiKey': BINANCE_API_KEY,
+        'secret': BINANCE_SECRET_KEY,
+        'enableRateLimit': True,
+        'testnet': True
+    })
+    logger.info("Connected to Binance.")
+
+    # Myntliste
+    coins = ["SOL/USDT", "AVAX/USDT", "DOGE/USDT", "SHIB/USDT", "ADA/USDT", 
+             "XRP/USDT", "JASMY/USDT", "BTC/USDT", "ETH/USDT", "FLOKI/USDT", 
+             "PEPE/USDT", "API3/USDT", "XCN/USDT"]
+
+    # Hovedløkke
     while True:
-        for symbol in COINS:
-            signal = get_breakout_signal(symbol)
-            if signal and signal["rsi"] < 75:
-                msg = f"Buy {symbol.split('/')[0]}, 3% breakout at ${signal['price']:.6f}"
-                send_signal(msg)  # Removed 'await'
-                entry_price = signal["price"]
-                target_price = entry_price * (1 + TAKE_PROFIT)
-                stop_price = entry_price * (1 - TRAIL_STOP)
-                send_signal(f"Trade opened: Entry ${entry_price:.6f}, Target ${target_price:.6f}, Stop ${stop_price:.6f}")
-        await asyncio.sleep(60)  # Keep 'await' for asyncio.sleep
+        for coin in coins:
+            try:
+                # Hent OHLCV-data
+                ohlcv = exchange.fetch_ohlcv(coin, timeframe='1m', limit=2)
+                df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                
+                # Beregn breakout
+                last_close = df['close'].iloc[-1]
+                prev_close = df['close'].iloc[-2]
+                breakout = last_close / prev_close >= 1.03  # 3% breakout
+                
+                # Beregn RSI
+                df['rsi'] = ta.momentum.RSIIndicator(df['close']).rsi()
+                rsi = df['rsi'].iloc[-1]
+                
+                # Sjekk betingelser
+                if breakout and rsi < 75:
+                    entry = last_close
+                    target = entry * 1.08  # 8% take profit
+                    stop = entry * 0.96    # 4% stop loss
+                    message = (f"Buy {coin.split('/')[0]}, 3% breakout at ${entry:.2f}\n"
+                              f"Trade opened: Entry ${entry:.2f}, Target ${target:.2f}, Stop ${stop:.2f}")
+                    bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+                    logger.info(f"Signal sent for {coin}: {message}")
+            except Exception as e:
+                logger.error(f"Error scanning {coin}: {str(e)}")
+        
+        logger.info("Completed one scan cycle. Waiting 60 seconds...")
+        time.sleep(60)
 
-if __name__ == "__main__":
-    asyncio.run(main())
+except Exception as e:
+    logger.error(f"Fatal error: {str(e)}")
+    sys.exit(1)
