@@ -64,18 +64,23 @@ async def main():
             for coin in coins:
                 try:
                     # Hent OHLCV-data
-                    ohlcv = exchange.fetch_ohlcv(coin, timeframe='1m', limit=15)  # Økt til 15 lys
+                    ohlcv = exchange.fetch_ohlcv(coin, timeframe='5m', limit=15)  # Endret til 5m
                     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
                     
                     # Beregn breakout
                     last_close = df['close'].iloc[-1]
                     prev_close = df['close'].iloc[-2]
-                    breakout = last_close / prev_close >= 1.03  # 3% breakout
+                    breakout = last_close / prev_close >= 1.005  # 0.5% breakout
                     price_change = (last_close / prev_close - 1) * 100  # % endring
                     
                     # Beregn RSI
                     df['rsi'] = ta.momentum.RSIIndicator(df['close']).rsi()
                     rsi = df['rsi'].iloc[-1]
+                    
+                    # Sjekk for ugyldige RSI-verdier
+                    if rsi <= 0 or rsi >= 100:
+                        logger.warning(f"{coin}: Invalid RSI value {rsi:.2f}, skipping signal")
+                        continue
                     
                     # Logg prisendring og RSI
                     logger.info(f"{coin}: Price change {price_change:.2f}%, RSI {rsi:.2f}")
@@ -85,7 +90,7 @@ async def main():
                         entry = last_close
                         target = entry * 1.08  # 8% take profit
                         stop = entry * 0.96    # 4% stop loss
-                        message = (f"Buy {coin.split('/')[0]}, 3% breakout at ${entry:.2f}\n"
+                        message = (f"Buy {coin.split('/')[0]}, 0.5% breakout at ${entry:.2f}\n"
                                    f"Trade opened: Entry ${entry:.2f}, Target ${target:.2f}, Stop ${stop:.2f}")
                         await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
                         logger.info(f"Signal sent for {coin}: {message}")
