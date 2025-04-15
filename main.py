@@ -79,7 +79,7 @@ async def fetch_and_analyze_news(coins, bot, chat_id):
                 if ticker_headlines:
                     avg_sentiment = sentiment_score / len(ticker_headlines)
                     logger.info(f"Sentiment for {coin}: {avg_sentiment:.2f} (based on {len(ticker_headlines)} headlines)")
-                    if avg_sentiment > 0.3:  # Senket terskel
+                    if avg_sentiment > 0.3:
                         message = f"📈 Potential Buy Signal for {coin}: Positive sentiment ({avg_sentiment:.2f}) based on recent news"
                         await bot.send_message(chat_id=chat_id, text=message)
                         logger.info(f"News-based prediction sent for {coin}: {message}")
@@ -123,24 +123,52 @@ async def fetch_whale_activity(coins, bot, chat_id):
 class PerformanceTracker:
     def __init__(self):
         self.trades = []
+        self.ml_trades = []
         self.total_trades = 0
         self.winning_trades = 0
+        self.ml_total_trades = 0
+        self.ml_winning_trades = 0
+        self.returns = []
+        self.max_losing_streak = 0
+        self.current_losing_streak = 0
 
-    def add_trade(self, coin, entry_price, target_price, stop_price, result):
-        self.total_trades += 1
-        if result == "win":
-            self.winning_trades += 1
-        self.trades.append({
-            "coin": coin,
-            "entry_price": entry_price,
-            "target_price": target_price,
-            "stop_price": stop_price,
-            "result": result
-        })
+    def add_trade(self, coin, entry_price, target_price, stop_price, result, trade_type="breakout"):
+        if trade_type == "breakout" or trade_type == "short":
+            self.total_trades += 1
+            if result == "win":
+                self.winning_trades += 1
+                return_percent = (target_price / entry_price - 1) * 100 if trade_type == "breakout" else (entry_price / target_price - 1) * 100
+                self.returns.append(return_percent)
+                self.current_losing_streak = 0
+            else:
+                self.returns.append(-4.0)  # Antatt tap basert på stop-loss
+                self.current_losing_streak += 1
+                self.max_losing_streak = max(self.max_losing_streak, self.current_losing_streak)
+            self.trades.append({
+                "coin": coin,
+                "entry_price": entry_price,
+                "target_price": target_price,
+                "stop_price": stop_price,
+                "result": result,
+                "type": trade_type
+            })
+        elif trade_type == "ml":
+            self.ml_total_trades += 1
+            if result == "win":
+                self.ml_winning_trades += 1
+            self.ml_trades.append({
+                "coin": coin,
+                "entry_price": entry_price,
+                "result": result
+            })
 
     def get_stats(self):
         win_rate = (self.winning_trades / self.total_trades * 100) if self.total_trades > 0 else 0
-        return f"Performance: Total Trades: {self.total_trades}, Win Rate: {win_rate:.2f}%"
+        ml_win_rate = (self.ml_winning_trades / self.ml_total_trades * 100) if self.ml_total_trades > 0 else 0
+        avg_return = np.mean(self.returns) if self.returns else 0
+        return (f"Performance: Total Trades: {self.total_trades}, Win Rate: {win_rate:.2f}%, "
+                f"Avg Return: {avg_return:.2f}%, Max Losing Streak: {self.max_losing_streak}\n"
+                f"ML Signals: Total: {self.ml_total_trades}, Win Rate: {ml_win_rate:.2f}%")
 
 async def main():
     try:
@@ -162,7 +190,7 @@ async def main():
         # Koble til Telegram
         logger.info("Connecting to Telegram...")
         bot = Bot(token=TELEGRAM_BOT_TOKEN)
-        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text="🤖 Bot started, scanning 50 coins, news, and whale activity...")
+        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text="🤖 Bot started, scanning 100 coins, news, and whale activity...")
         logger.info("Connected to Telegram.")
 
         # Koble til live Binance API
@@ -173,16 +201,16 @@ async def main():
         })
         logger.info("Connected to Binance.")
 
-        # Hent topp 50 mynter basert på volum
-        logger.info("Fetching top 50 coins by volume...")
+        # Hent topp 100 mynter basert på volum
+        logger.info("Fetching top 100 coins by volume...")
         markets = exchange.fetch_tickers()
         sorted_markets = sorted(
             [(symbol, market['quoteVolume']) for symbol, market in markets.items() if symbol.endswith('/USDT')],
             key=lambda x: x[1],
             reverse=True
         )
-        coins = [symbol for symbol, _ in sorted_markets[:50]]
-        logger.info(f"Top 50 coins: {coins}")
+        coins = [symbol for symbol, _ in sorted_markets[:100]]
+        logger.info(f"Top 100 coins: {coins}")
 
         # Last ML-modell (XGBoost)
         try:
@@ -194,6 +222,7 @@ async def main():
 
         # Dictionary for å holde styr på cooldown for hver mynt
         breakout_cooldown = {coin: None for coin in coins}
+        short_cooldown = {coin: None for coin in coins}
         ml_cooldown = {coin: None for coin in coins}
         COOLDOWN_MINUTES = 60
 
@@ -208,8 +237,26 @@ async def main():
         # Ytelsesporing
         tracker = PerformanceTracker()
 
+        # Markedsregime-analyse basert på BTC/USDT
+        btc_ohlcv = exchange.fetch_ohlcv("BTC/USDT", timeframe='1h', limit=50)
+        btc_df = pd.DataFrame(btc_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        btc_df['ma50'] = btc_df['close'].rolling(window=50).mean()
+        btc_current_price = btc_df['close'].iloc[-1]
+        btc_ma50 = btc_df['ma50'].iloc[-1]
+        market_regime = "bull" if btc_current_price > btc_ma50 else "bear"
+        logger.info(f"Market regime: {market_regime}")
+
         # Hovedløkke for pris-skanning
         while True:
+            # Oppdater markedsregime hver time
+            btc_ohlcv = exchange.fetch_ohlcv("BTC/USDT", timeframe='1h', limit=50)
+            btc_df = pd.DataFrame(btc_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            btc_df['ma50'] = btc_df['close'].rolling(window=50).mean()
+            btc_current_price = btc_df['close'].iloc[-1]
+            btc_ma50 = btc_df['ma50'].iloc[-1]
+            market_regime = "bull" if btc_current_price > btc_ma50 else "bear"
+            logger.info(f"Market regime updated: {market_regime}")
+
             for coin in coins:
                 try:
                     # Hent OHLCV-data for siste 15 minutter
@@ -251,8 +298,12 @@ async def main():
                     # ATR for dynamiske terskler
                     atr = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close']).average_true_range().iloc[-1]
                     breakout_threshold = max(2.0, (atr / current_price * 100) * 2)  # Minimum 2%, eller ATR-basert
-                    tp_multiplier = 2.0 * (atr / current_price)  # TP basert på 2x ATR
-                    sl_multiplier = 1.0 * (atr / current_price)  # SL basert på 1x ATR
+                    if market_regime == "bull":
+                        breakout_threshold *= 1.2  # Øk terskel i bullmarked
+                    elif market_regime == "bear":
+                        breakout_threshold *= 0.8  # Reduser terskel i bearmarked
+                    tp_multiplier = 2.0 * (atr / current_price)
+                    sl_multiplier = 1.0 * (atr / current_price)
                     
                     logger.info(f"{coin}: Price change from start {price_change:.2f}% over {time_diff_minutes:.1f} minutes, RSI {rsi:.2f}, Volume increase {volume_increase:.2f}%, ATR {atr:.4f}")
                     
@@ -278,7 +329,7 @@ async def main():
                                 transactions = data["result"][:10]
                                 whale_txs = len([tx for tx in transactions if int(tx["value"]) / 10**18 > 1000])
 
-                    # Prisavvik (avvik fra 15-minutters gjennomsnitt)
+                    # Prisavvik
                     price_deviation = (current_price - df['close'].mean()) / df['close'].std() if df['close'].std() > 0 else 0
 
                     # ML-prediksjon (XGBoost)
@@ -288,7 +339,7 @@ async def main():
                     confidence = model.predict_proba(features)[0].max()
                     logger.info(f"ML Prediction for {coin}: {'Up' if prediction == 1 else 'Down'} with confidence {confidence:.2f}")
 
-                    # Breakout-signal: Dynamisk terskel basert på ATR
+                    # Breakout-signal (kjøp)
                     if breakout_cooldown[coin]:
                         time_since_breakout = (datetime.utcnow() - breakout_cooldown[coin]).total_seconds() / 60
                         if time_since_breakout < COOLDOWN_MINUTES:
@@ -297,7 +348,7 @@ async def main():
                             breakout_cooldown[coin] = None
 
                     if (not breakout_cooldown[coin] and price_change >= breakout_threshold and time_diff_minutes <= 15 and
-                        volume_increase >= 50):  # Volumkrav
+                        volume_increase >= 50):
                         entry = current_price
                         target = entry * (1 + tp_multiplier)
                         stop = entry * (1 - sl_multiplier)
@@ -307,15 +358,41 @@ async def main():
                         logger.info(f"Breakout signal sent for {coin}: {message}")
                         breakout_cooldown[coin] = datetime.utcnow()
 
-                        # Spor trade for ytelsesanalyse (forenklet: antar treff hvis pris når target innen 1 time)
+                        # Spor trade for ytelsesanalyse
                         await asyncio.sleep(3600)  # Vent 1 time
                         ohlcv_check = exchange.fetch_ohlcv(coin, timeframe='1m', limit=1)
                         current_price_check = ohlcv_check[0][4]
                         result = "win" if current_price_check >= target else "loss"
-                        tracker.add_trade(coin, entry, target, stop, result)
+                        tracker.add_trade(coin, entry, target, stop, result, trade_type="breakout")
                         await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=tracker.get_stats())
 
-                    # ML-signal: Uavhengig av breakout, hvis ML-prediksjon er "Up" med høy konfidens
+                    # Short-signal basert på ML-prediksjon
+                    if short_cooldown[coin]:
+                        time_since_short = (datetime.utcnow() - short_cooldown[coin]).total_seconds() / 60
+                        if time_since_short < COOLDOWN_MINUTES:
+                            logger.info(f"{coin}: Short signal in cooldown, {COOLDOWN_MINUTES - time_since_short:.1f} minutes remaining")
+                        else:
+                            short_cooldown[coin] = None
+
+                    if not short_cooldown[coin] and prediction == 0 and confidence >= 0.55 and time_diff_minutes <= 15:
+                        entry = current_price
+                        target = entry * (1 - tp_multiplier)
+                        stop = entry * (1 + sl_multiplier)
+                        message = (f"📉 Short Signal for {coin.split('/')[0]}: Model predicts price decrease with confidence {confidence:.2f}\n"
+                                   f"Trade opened: Entry ${entry:.2f}, Target ${target:.2f}, Stop ${stop:.2f}")
+                        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+                        logger.info(f"Short signal sent for {coin}: {message}")
+                        short_cooldown[coin] = datetime.utcnow()
+
+                        # Spor trade for ytelsesanalyse
+                        await asyncio.sleep(3600)  # Vent 1 time
+                        ohlcv_check = exchange.fetch_ohlcv(coin, timeframe='1m', limit=1)
+                        current_price_check = ohlcv_check[0][4]
+                        result = "win" if current_price_check <= target else "loss"
+                        tracker.add_trade(coin, entry, target, stop, result, trade_type="short")
+                        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=tracker.get_stats())
+
+                    # ML-signal (kjøp)
                     if ml_cooldown[coin]:
                         time_since_ml = (datetime.utcnow() - ml_cooldown[coin]).total_seconds() / 60
                         if time_since_ml < COOLDOWN_MINUTES:
@@ -323,11 +400,19 @@ async def main():
                         else:
                             ml_cooldown[coin] = None
 
-                    if not ml_cooldown[coin] and prediction == 1 and confidence >= 0.55:  # Senket terskel
+                    if not ml_cooldown[coin] and prediction == 1 and confidence >= 0.55:
                         message = f"📈 ML Buy Signal for {coin.split('/')[0]}: Model predicts price increase with confidence {confidence:.2f}"
                         await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
                         logger.info(f"ML signal sent for {coin}: {message}")
                         ml_cooldown[coin] = datetime.utcnow()
+
+                        # Spor ML-signal for ytelsesanalyse (forenklet: antar treff hvis pris øker innen 1 time)
+                        await asyncio.sleep(3600)  # Vent 1 time
+                        ohlcv_check = exchange.fetch_ohlcv(coin, timeframe='1m', limit=1)
+                        current_price_check = ohlcv_check[0][4]
+                        result = "win" if current_price_check > current_price else "loss"
+                        tracker.add_trade(coin, current_price, None, None, result, trade_type="ml")
+                        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=tracker.get_stats())
 
                     # Legg til data for online læring
                     training_data.append([sentiment_score, whale_txs, rsi, current_volume, macd_line - signal_line, price_deviation])
