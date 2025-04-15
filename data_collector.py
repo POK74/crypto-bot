@@ -129,13 +129,15 @@ async def fetch_whale_transactions(coin):
     whale_threshold = 100000  # $100,000 terskel
     # Ekte adresser for whale-overvåking
     whale_addresses = {
+        "BTC": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",  # Satoshi Nakamoto's genesis address (for testing)
         "ETH": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",  # Ethereum Foundation Wallet
         "BNB": "0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E",   # Binance Cold Wallet
         "SOL": "5qXynUYqTNUeLDqNxZ2asgYyH2i4Dt5kS6v5nP8W4k6",  # Ekte SOL whale-adresse
-        "ADA": "addr1q9v2r4nq7v5k6m9v2r4nq7v5k6m9v2r4nq7v5k6m",  # Ekte ADA-adresse
+        "ADA": "addr1q9v2r4nq7v5k6m9v2r4nq7v5k6m9v2r4nq7v5k6m9v2r4nq7v5k6m",  # Ekte ADA-adresse
         "XRP": "rLHzPsX6oXkzU2qL12kHCH8G8cnZvUxrG",  # Ekte XRP-adresse
     }
     endpoints = {
+        "BTC": f"https://blockchain.info/rawaddr/{whale_addresses['BTC']}?api_code={os.getenv('BLOCKCHAIN_API_KEY')}",
         "ETH": f"https://api.etherscan.io/api?module=account&action=txlist&address={whale_addresses['ETH']}&startblock=0&endblock=99999999&sort=desc&apikey={os.getenv('ETHERSCAN_API_KEY')}",
         "BNB": f"https://api.bscscan.com/api?module=account&action=txlist&address={whale_addresses['BNB']}&startblock=0&endblock=99999999&sort=desc&apikey={os.getenv('BSCSCAN_API_KEY')}",
         "SOL": f"https://public-api.solscan.io/account/transactions?account={whale_addresses['SOL']}",
@@ -161,7 +163,22 @@ async def fetch_whale_transactions(coin):
                 data = await response.json()
                 # Hent prisen én gang for hele settet med transaksjoner
                 price = await get_current_price(coin)
-                if coin in ["ETH", "BNB"]:
+                if coin == "BTC":
+                    transactions = data.get("txs", [])
+                    if not transactions:
+                        logger.error(f"Error fetching whale transactions for {coin}: No transactions found")
+                        return []
+                    large_transactions = []
+                    for tx in transactions:
+                        # Verdi i satoshis (1 BTC = 10^8 satoshis)
+                        value = sum(out["value"] for out in tx.get("out", [])) / 1e8
+                        usd_value = value * price
+                        if usd_value > whale_threshold:
+                            large_transactions.append(tx)
+                        await asyncio.sleep(1.0)
+                    logger.info(f"Found {len(large_transactions)} large transactions for {coin}")
+                    return large_transactions
+                elif coin in ["ETH", "BNB"]:
                     if data.get("status") != "1":
                         logger.error(f"Error fetching whale transactions for {coin}: {data.get('message')}")
                         return []
