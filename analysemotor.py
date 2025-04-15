@@ -32,7 +32,7 @@ class Analyzer:
             logger.error(f"Error fitting analyzer: {str(e)}")
             raise
 
-    def analyze_data(self, data, current_price):
+    def analyze_data(self, data, current_price, coin):
         try:
             if not self.is_fitted:
                 raise ValueError("Analyzer is not fitted. Call 'fit' with training data first.")
@@ -47,12 +47,12 @@ class Analyzer:
                 target_price = current_price * 1.05  # Målsum: 5 % økning
                 stop_loss = current_price * 0.98    # Stop-loss: 2 % under
                 message = (
-                    f"🚀 ML Signal: {data[0][0]}/USDT\n"
+                    f"🚀 ML Signal: {coin}/USDT\n"
                     f"Prediction: Buy\n"
                     f"Current Price: ${current_price:.2f}\n"
                     f"Target Price: ${target_price:.2f} (+5%)\n"
                     f"Stop-Loss: ${stop_loss:.2f} (-2%)\n"
-                    f"Horizon: Within 24 hours"
+                    f"Horizon: Within 1 hour"
                 )
                 return message
             else:
