@@ -158,7 +158,7 @@ async def main():
             logger.error(f"Failed to load ML model: {str(e)}. Starting with a fresh model.")
             model = RandomForestClassifier(n_estimators=100, warm_start=True)
 
-        # Myntliste
+        # Myntliste (rettet HBAR/USDT)
         coins = ["SOL/USDT", "AVAX/USDT", "DOGE/USDT", "SHIB/USDT", "ADA/USDT", 
                  "XRP/USDT", "JASMY/USDT", "FLOKI/USDT", "PEPE/USDT", "API3/USDT", 
                  "BONK/USDT", "WIF/USDT", "POPCAT/USDT", "NEIRO/USDT", "TURBO/USDT", 
