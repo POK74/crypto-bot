@@ -6,3 +6,6 @@ feedparser
 requests
 beautifulsoup4
 textblob
+scikit-learn
+joblib
+aiohttp
