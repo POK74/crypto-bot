@@ -15,17 +15,22 @@ async def detect_breakout(df):
     if df is None or len(df) < 10:  # Redusert krav til antall candlesticks
         logger.info("Not enough data for breakout detection")
         return False
-    df["ma10"] = df["close"].rolling(window=10).mean()  # Redusert til MA10 for raskere signaler
+    df["ma10"] = df["close"].rolling(window=10).mean()
+    df["avg_volume"] = df["volume"].rolling(window=10).mean()
     last_price = df["close"].iloc[-1]
     ma10 = df["ma10"].iloc[-1]
-    # Sjekk om prisen har krysset MA10 de siste 2 candlene
+    last_volume = df["volume"].iloc[-1]
+    avg_volume = df["avg_volume"].iloc[-1]
+    # Sjekk om prisen har krysset MA10 de siste 2 candlene og om volumet er over gjennomsnittet
     recent_cross = any(
         df["close"].iloc[-i] > df["ma10"].iloc[-i] and df["close"].iloc[-i-1] <= df["ma10"].iloc[-i-1]
         for i in range(1, 3)
     )
-    if recent_cross:
-        logger.info(f"Breakout detected: {last_price} crossed above MA10 ({ma10})")
-    return recent_cross
+    volume_increase = last_volume > avg_volume * 1.5  # Volum må være 50 % over gjennomsnittet
+    if recent_cross and volume_increase:
+        logger.info(f"Breakout detected: {last_price} crossed above MA10 ({ma10}) with volume {last_volume} (avg: {avg_volume})")
+        return True
+    return False
 
 async def main():
     # Send oppstartsmelding til Telegram
