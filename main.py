@@ -12,22 +12,25 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 async def detect_breakout(df):
-    if df is None or len(df) < 20:
+    if df is None or len(df) < 10:  # Redusert krav til antall candlesticks
         logger.info("Not enough data for breakout detection")
         return False
-    df["ma20"] = df["close"].rolling(window=20).mean()
+    df["ma10"] = df["close"].rolling(window=10).mean()  # Redusert til MA10 for raskere signaler
     last_price = df["close"].iloc[-1]
-    ma20 = df["ma20"].iloc[-1]
-    # Mindre streng logikk: Sjekk om prisen har krysset MA20 de siste 3 candlene
+    ma10 = df["ma10"].iloc[-1]
+    # Sjekk om prisen har krysset MA10 de siste 2 candlene
     recent_cross = any(
-        df["close"].iloc[-i] > df["ma20"].iloc[-i] and df["close"].iloc[-i-1] <= df["ma20"].iloc[-i-1]
-        for i in range(1, 4)
+        df["close"].iloc[-i] > df["ma10"].iloc[-i] and df["close"].iloc[-i-1] <= df["ma10"].iloc[-i-1]
+        for i in range(1, 3)
     )
     if recent_cross:
-        logger.info(f"Breakout detected: {last_price} crossed above MA20 ({ma20})")
+        logger.info(f"Breakout detected: {last_price} crossed above MA10 ({ma10})")
     return recent_cross
 
 async def main():
+    # Send oppstartsmelding til Telegram
+    await send_telegram_message("🤖 Bot started successfully!")
+    
     # Initialiser Analyzer
     analyzer = Analyzer()
 
@@ -47,6 +50,11 @@ async def main():
             # Filtrer ut stablecoins
             coins = [coin for coin in coins if coin not in stablecoins]
             logger.info(f"Fetched top 100 coins (filtered): {coins}")
+            
+            # Send melding om hvilke mynter som skannes
+            scan_count = min(len(coins), 5)  # Vi skanner topp 5
+            await send_telegram_message(f"🔍 Scanning top {scan_count} coins: {', '.join(coins[:scan_count])}\nMonitoring news and whale activity...")
+
             for coin in coins[:5]:  # Begrens til topp 5 for testing
                 # Hent prisdata og oppdag breakout
                 df = await fetch_price_data(coin)
@@ -75,10 +83,11 @@ async def main():
                 if df is not None:
                     # Forbered data for analyse (lukkekurs, volum)
                     data = df[["close", "volume"]].tail(1).values
+                    current_price = df["close"].iloc[-1]
                     try:
-                        prediction = analyzer.analyze_data(data)
-                        if prediction and prediction[0] == 1:  # Forutsatt 1 = kjøpssignal
-                            message = f"🚀 ML Signal: {coin}/USDT\nPrediction: Buy"
+                        prediction = analyzer.analyze_data(data, current_price)
+                        if prediction:
+                            message = prediction  # Meldingen genereres i analysemotor.py
                             await send_telegram_message(message)
                             logger.info(f"ML signal sent for {coin}/USDT")
                     except Exception as e:
