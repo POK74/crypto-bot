@@ -158,7 +158,7 @@ async def main():
             logger.error(f"Failed to load ML model: {str(e)}. Starting with a fresh model.")
             model = RandomForestClassifier(n_estimators=100, warm_start=True)
 
-        # Myntliste (rettet HBAR/USDT)
+        # Myntliste
         coins = ["SOL/USDT", "AVAX/USDT", "DOGE/USDT", "SHIB/USDT", "ADA/USDT", 
                  "XRP/USDT", "JASMY/USDT", "FLOKI/USDT", "PEPE/USDT", "API3/USDT", 
                  "BONK/USDT", "WIF/USDT", "POPCAT/USDT", "NEIRO/USDT", "TURBO/USDT", 
@@ -235,8 +235,8 @@ async def main():
                                 transactions = data["result"][:10]
                                 whale_txs = len([tx for tx in transactions if int(tx["value"]) / 10**18 > 1000])
 
-                    # ML-prediksjon
-                    features = np.array([[sentiment_score, whale_txs, rsi]])
+                    # ML-prediksjon (med navngitte funksjoner for å unngå advarsel)
+                    features = pd.DataFrame([[sentiment_score, whale_txs, rsi]], columns=['sentiment', 'whale_txs', 'rsi'])
                     prediction = model.predict(features)[0]
                     confidence = model.predict_proba(features)[0].max()
                     logger.info(f"ML Prediction for {coin}: {'Up' if prediction == 1 else 'Down'} with confidence {confidence:.2f}")
