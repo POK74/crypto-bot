@@ -13,33 +13,46 @@ logger = logging.getLogger(__name__)
 
 async def detect_breakout(df):
     if df is None or len(df) < 20:
+        logger.info("Not enough data for breakout detection")
         return False
     df["ma20"] = df["close"].rolling(window=20).mean()
     last_price = df["close"].iloc[-1]
     ma20 = df["ma20"].iloc[-1]
-    return last_price > ma20 and df["close"].iloc[-2] <= df["ma20"].iloc[-2]
+    # Mindre streng logikk: Sjekk om prisen har krysset MA20 de siste 3 candlene
+    recent_cross = any(
+        df["close"].iloc[-i] > df["ma20"].iloc[-i] and df["close"].iloc[-i-1] <= df["ma20"].iloc[-i-1]
+        for i in range(1, 4)
+    )
+    if recent_cross:
+        logger.info(f"Breakout detected: {last_price} crossed above MA20 ({ma20})")
+    return recent_cross
 
 async def main():
     # Initialiser Analyzer
     analyzer = Analyzer()
 
     # Generer et enkelt treningsdatasett for å trene StandardScaler og XGBoost
-    # Dette er et eksempelsett med 100 rader, 2 funksjoner (close, volume)
     np.random.seed(42)
     train_data = np.random.rand(100, 2) * 1000  # Tilfeldige verdier for close og volume
     train_labels = np.random.randint(0, 2, 100)  # Tilfeldige etiketter (0 eller 1)
     analyzer.fit(train_data, train_labels)
     logger.info("Analyzer fitted with training data")
 
+    # Liste over stablecoins å ekskludere
+    stablecoins = ["USDT", "USDC", "USDS", "BSC-USD", "USDE", "BUIDL", "FDUSD", "PYUSD"]
+
     while True:
         try:
             coins = await fetch_top_coins()
-            logger.info(f"Fetched top 100 coins: {coins}")
+            # Filtrer ut stablecoins
+            coins = [coin for coin in coins if coin not in stablecoins]
+            logger.info(f"Fetched top 100 coins (filtered): {coins}")
             for coin in coins[:5]:  # Begrens til topp 5 for testing
                 # Hent prisdata og oppdag breakout
                 df = await fetch_price_data(coin)
                 if df is not None:
-                    if await detect_breakout(df):
+                    breakout_detected = await detect_breakout(df)
+                    if breakout_detected:
                         message = f"🚨 Breakout Signal: {coin}/USDT\nPrice: {df['close'].iloc[-1]}"
                         await send_telegram_message(message)
                         logger.info(f"Breakout signal sent for {coin}/USDT")
@@ -54,7 +67,7 @@ async def main():
                 # Hent whale-transaksjoner
                 whale_txs = await fetch_whale_transactions(coin)
                 if whale_txs:
-                    message = f"🐳 Whale Alert: {coin}\nLarge Transactions Detected: {len(whale_txs)} over $500,000"
+                    message = f"🐳 Whale Alert: {coin}\nLarge Transactions Detected: {len(whale_txs)} over $100,000"
                     await send_telegram_message(message)
                     logger.info(f"Whale alert sent for {coin}")
 
