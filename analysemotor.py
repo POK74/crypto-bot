@@ -32,7 +32,7 @@ class Analyzer:
             logger.error(f"Error fitting analyzer: {str(e)}")
             raise
 
-    def analyze_data(self, data):
+    def analyze_data(self, data, current_price):
         try:
             if not self.is_fitted:
                 raise ValueError("Analyzer is not fitted. Call 'fit' with training data first.")
@@ -42,7 +42,21 @@ class Analyzer:
             scaled_data = self.scaler.transform(X)
             # Forutsig med modellen
             prediction = self.model.predict(scaled_data)
-            return prediction.tolist()
+            # Generer detaljert melding basert på prediksjon
+            if prediction[0] == 1:  # Kjøpssignal
+                target_price = current_price * 1.05  # Målsum: 5 % økning
+                stop_loss = current_price * 0.98    # Stop-loss: 2 % under
+                message = (
+                    f"🚀 ML Signal: {data[0][0]}/USDT\n"
+                    f"Prediction: Buy\n"
+                    f"Current Price: ${current_price:.2f}\n"
+                    f"Target Price: ${target_price:.2f} (+5%)\n"
+                    f"Stop-Loss: ${stop_loss:.2f} (-2%)\n"
+                    f"Horizon: Within 24 hours"
+                )
+                return message
+            else:
+                return None  # Ingen melding hvis prediksjonen er "selg" eller "hold"
         except Exception as e:
             logger.error(f"Error in analyze_data: {str(e)}")
             raise
