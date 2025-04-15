@@ -13,6 +13,9 @@ import requests
 import aiohttp
 from bs4 import BeautifulSoup
 from textblob import TextBlob
+from sklearn.ensemble import RandomForestClassifier
+import joblib
+import numpy as np
 
 # Sett opp logging først
 logging.basicConfig(
@@ -24,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 logger.info("Starting bot...")
 
-# Funksjon for å hente nyheter fra RSS og X
+# Funksjon for å hente nyheter og reguleringsdata fra RSS og X
 async def fetch_and_analyze_news(coins, bot, chat_id):
     try:
         coin_tickers = [coin.split('/')[0].lower() for coin in coins]
@@ -32,6 +35,7 @@ async def fetch_and_analyze_news(coins, bot, chat_id):
             "https://cointelegraph.com/rss",
             "https://www.reddit.com/r/cryptocurrency/new/.rss"
         ]
+        regulatory_keywords = ["ban", "regulation", "legislation", "sec", "lawsuit"]
         headers = {'User-Agent': 'Mozilla/5.0'}
         
         while True:
@@ -60,9 +64,14 @@ async def fetch_and_analyze_news(coins, bot, chat_id):
                     continue
                 
                 sentiment_score = 0
+                regulatory_impact = False
                 for headline in ticker_headlines:
                     analysis = TextBlob(headline)
                     sentiment_score += analysis.sentiment.polarity
+                    if any(keyword in headline.lower() for keyword in regulatory_keywords):
+                        regulatory_impact = True
+                        await bot.send_message(chat_id=chat_id, text=f"⚠️ Regulatory Alert for {coin}: {headline}")
+                        logger.info(f"Regulatory alert sent for {coin}: {headline}")
                 
                 if ticker_headlines:
                     avg_sentiment = sentiment_score / len(ticker_headlines)
@@ -82,7 +91,7 @@ async def fetch_and_analyze_news(coins, bot, chat_id):
 async def fetch_whale_activity(bot, chat_id):
     try:
         etherscan_api_url = "https://api.etherscan.io/api?module=account&action=txlist&address=0x0000000000000000000000000000000000000000&sort=desc&apikey=XUKZ1QH46941VJNH9U8CSQN7XVNTRNYKV7"
-        whale_threshold = 1000  # 1000 ETH
+        whale_threshold = 1000
         headers = {'User-Agent': 'Mozilla/5.0'}
         
         while True:
@@ -139,13 +148,21 @@ async def main():
         })
         logger.info("Connected to Binance.")
 
+        # Last ML-modell
+        try:
+            model = joblib.load("rf_model.pkl")
+            logger.info("ML model loaded successfully.")
+        except Exception as e:
+            logger.error(f"Failed to load ML model: {str(e)}. Starting with a fresh model.")
+            model = RandomForestClassifier(n_estimators=100, warm_start=True)
+
         # Myntliste
         coins = ["SOL/USDT", "AVAX/USDT", "DOGE/USDT", "SHIB/USDT", "ADA/USDT", 
                  "XRP/USDT", "JASMY/USDT", "FLOKI/USDT", "PEPE/USDT", "API3/USDT", 
                  "BONK/USDT", "WIF/USDT", "POPCAT/USDT", "NEIRO/USDT", "TURBO/USDT", 
                  "MEME/USDT", "BOME/USDT", "TON/USDT", "SUI/USDT", "APT/USDT", 
                  "LINK/USDT", "DOT/USDT", "MATIC/USDT", "NEAR/USDT", "RUNE/USDT", 
-                 "INJ/USDT", "FTM/USDT", "GALA/USDT", "HBAR/USDT", "ORDI/USDT"]
+                 "INJ/USDT", "FTM/USDT", "GALA/USDT", "HB Search for more...AR/USDT", "ORDI/USDT"]
 
         # Dictionary for å holde styr på cooldown for hver mynt
         signal_cooldown = {coin: None for coin in coins}
@@ -155,64 +172,8 @@ async def main():
         news_task = asyncio.create_task(fetch_and_analyze_news(coins, bot, TELEGRAM_CHAT_ID))
         whale_task = asyncio.create_task(fetch_whale_activity(bot, TELEGRAM_CHAT_ID))
 
-        # Hovedløkke for pris-skanning
-        while True:
-            for coin in coins:
-                try:
-                    # Sjekk om mynten er i cooldown
-                    if signal_cooldown[coin]:
-                        time_since_signal = (datetime.utcnow() - signal_cooldown[coin]).total_seconds() / 60
-                        if time_since_signal < COOLDOWN_MINUTES:
-                            logger.info(f"{coin}: In cooldown, {COOLDOWN_MINUTES - time_since_signal:.1f} minutes remaining")
-                            continue
-                        else:
-                            signal_cooldown[coin] = None
+        # Data for online læring
+        training_data = []
+        training_labels = []
 
-                    # Hent OHLCV-data for siste 15 minutter
-                    ohlcv = exchange.fetch_ohlcv(coin, timeframe='1m', limit=15)
-                    df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-                    
-                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-                    start_price = df['close'].iloc[0]
-                    start_timestamp = df['timestamp'].iloc[0]
-                    current_price = df['close'].iloc[-1]
-                    current_timestamp = df['timestamp'].iloc[-1]
-                    
-                    price_change = (current_price / start_price - 1) * 100
-                    time_diff_minutes = (current_timestamp - start_timestamp).total_seconds() / 60
-                    
-                    df['rsi'] = ta.momentum.RSIIndicator(df['close']).rsi()
-                    rsi = df['rsi'].iloc[-1]
-                    
-                    if rsi <= 0 or rsi >= 100:
-                        logger.warning(f"{coin}: Invalid RSI value {rsi:.2f}, skipping signal")
-                        continue
-                    
-                    logger.info(f"{coin}: Price change from start {price_change:.2f}% over {time_diff_minutes:.1f} minutes, RSI {rsi:.2f}")
-                    
-                    if price_change >= 2.5 and time_diff_minutes <= 15 and rsi < 80:
-                        entry = current_price
-                        target = entry * 1.08
-                        stop = entry * 0.96
-                        message = (f"Buy {coin.split('/')[0]}, 2.5% breakout at ${entry:.2f} over {time_diff_minutes:.1f} minutes\n"
-                                   f"Trade opened: Entry ${entry:.2f}, Target ${target:.2f}, Stop ${stop:.2f}")
-                        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-                        logger.info(f"Signal sent for {coin}: {message}")
-                        signal_cooldown[coin] = datetime.utcnow()
-                except Exception as e:
-                    logger.error(f"Error scanning {coin}: {str(e)}")
-                
-                await asyncio.sleep(0.5)
-            
-            logger.info("Completed one scan cycle. Waiting 30 seconds...")
-            await asyncio.sleep(30)
-
-    except Exception as e:
-        logger.error(f"Fatal error: {str(e)}")
-        sys.exit(1)
-    finally:
-        news_task.cancel()
-        whale_task.cancel()
-
-if __name__ == "__main__":
-    asyncio.run(main())
+        # Hovedløk
