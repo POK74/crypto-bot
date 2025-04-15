@@ -5,6 +5,7 @@ import pandas as pd
 import ccxt.async_support as ccxt
 from datetime import datetime, timedelta
 import asyncio
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,66 @@ async def fetch_price_data(coin):
             logger.error(f"Error fetching Binance data for {coin}/USDT: {str(e)}")
             return None
 
+async def fetch_historical_data_for_training(coin, days=90):
+    """
+    Henter historiske data for trening av ML-modellen.
+    Henter 1-times OHLCV-data for de siste 'days' dagene fra CoinGecko.
+    """
+    async with aiohttp.ClientSession() as session:
+        try:
+            # CoinGecko API krever coin ID, ikke symbol, så vi mapper symbol til ID
+            symbol_to_id = {
+                "BTC": "bitcoin",
+                "ETH": "ethereum",
+                "BNB": "binancecoin",
+                "SOL": "solana",
+                "ADA": "cardano",
+            }
+            coin_id = symbol_to_id.get(coin)
+            if not coin_id:
+                logger.error(f"No CoinGecko ID mapping for {coin}")
+                return None
+
+            # Beregn tidsstempler for start- og sluttdato
+            end_timestamp = int(datetime.now().timestamp())
+            start_timestamp = int((datetime.now() - timedelta(days=days)).timestamp())
+            url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart/range?vs_currency=usd&from={start_timestamp}&to={end_timestamp}&interval=hourly"
+            
+            async with session.get(url) as response:
+                if response.status != 200:
+                    logger.error(f"Error fetching historical data for {coin}: {response.status}")
+                    return None
+                data = await response.json()
+                
+                # Hent priser og volum
+                prices = data.get("prices", [])
+                volumes = data.get("total_volumes", [])
+                if not prices or not volumes:
+                    logger.error(f"No price or volume data for {coin}")
+                    return None
+                
+                # Lag DataFrame
+                timestamps = [pd.to_datetime(price[0], unit="ms") for price in prices]
+                close_prices = [price[1] for price in prices]
+                volumes = [volume[1] for volume in volumes]
+                
+                df = pd.DataFrame({
+                    "timestamp": timestamps,
+                    "close": close_prices,
+                    "volume": volumes
+                })
+                
+                # Generer etiketter: 1 hvis neste pris er høyere, 0 ellers
+                df["next_close"] = df["close"].shift(-1)
+                df["label"] = np.where(df["next_close"] > df["close"], 1, 0)
+                df = df.dropna()  # Fjern rader med NaN (siste rad etter shift)
+                
+                logger.info(f"Fetched {len(df)} historical data points for {coin}")
+                return df
+        except Exception as e:
+            logger.error(f"Error fetching historical training data for {coin}: {str(e)}")
+            return None
+
 async def fetch_news(coin):
     async with aiohttp.ClientSession() as session:
         try:
@@ -71,7 +132,7 @@ async def fetch_whale_transactions(coin):
         "ETH": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",  # Ethereum Foundation Wallet
         "BNB": "0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E",   # Binance Cold Wallet
         "SOL": "5qXynUYqTNUeLDqNxZ2asgYyH2i4Dt5kS6v5nP8W4k6",  # Ekte SOL whale-adresse
-        "ADA": "addr1q9v2r4nq7v5k6m9v2r4nq7v5k6m9v2r4nq7v5k6m9v2r4nq7v5k6m",  # Ekte ADA-adresse
+        "ADA": "addr1q9v2r4nq7v5k6m9v2r4nq7v5k6m9v2r4nq7v5k6m",  # Ekte ADA-adresse
         "XRP": "rLHzPsX6oXkzU2qL12kHCH8G8cnZvUxrG",  # Ekte XRP-adresse
     }
     endpoints = {
