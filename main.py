@@ -176,4 +176,108 @@ async def main():
         training_data = []
         training_labels = []
 
-        # Hovedløk
+        # Hovedløkke for pris-skanning
+        while True:
+            for coin in coins:
+                try:
+                    # Sjekk om mynten er i cooldown
+                    if signal_cooldown[coin]:
+                        time_since_signal = (datetime.utcnow() - signal_cooldown[coin]).total_seconds() / 60
+                        if time_since_signal < COOLDOWN_MINUTES:
+                            logger.info(f"{coin}: In cooldown, {COOLDOWN_MINUTES - time_since_signal:.1f} minutes remaining")
+                            continue
+                        else:
+                            signal_cooldown[coin] = None
+
+                    # Hent OHLCV-data for siste 15 minutter
+                    ohlcv = exchange.fetch_ohlcv(coin, timeframe='1m', limit=15)
+                    df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                    
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                    start_price = df['close'].iloc[0]
+                    start_timestamp = df['timestamp'].iloc[0]
+                    current_price = df['close'].iloc[-1]
+                    current_timestamp = df['timestamp'].iloc[-1]
+                    
+                    price_change = (current_price / start_price - 1) * 100
+                    time_diff_minutes = (current_timestamp - start_timestamp).total_seconds() / 60
+                    
+                    df['rsi'] = ta.momentum.RSIIndicator(df['close']).rsi()
+                    rsi = df['rsi'].iloc[-1]
+                    
+                    if rsi <= 0 or rsi >= 100:
+                        logger.warning(f"{coin}: Invalid RSI value {rsi:.2f}, skipping signal")
+                        continue
+                    
+                    logger.info(f"{coin}: Price change from start {price_change:.2f}% over {time_diff_minutes:.1f} minutes, RSI {rsi:.2f}")
+                    
+                    # Hent nyhetssentiment for denne mynten
+                    ticker = coin.split('/')[0].lower()
+                    sentiment_score = 0
+                    news_headlines = []
+                    for source in ["https://cointelegraph.com/rss", "https://www.reddit.com/r/cryptocurrency/new/.rss"]:
+                        feed = feedparser.parse(source)
+                        for entry in feed.entries[:5]:
+                            headline = entry.title
+                            if ticker in headline.lower():
+                                news_headlines.append(headline)
+                    if news_headlines:
+                        sentiment_score = sum(TextBlob(h).sentiment.polarity for h in news_headlines) / len(news_headlines)
+
+                    # Hent whale-aktivitet (for enkelhet, bare for ETH som en proxy)
+                    whale_txs = 0
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(etherscan_api_url) as resp:
+                            data = await resp.json()
+                            if data["status"] == "1":
+                                transactions = data["result"][:10]
+                                whale_txs = len([tx for tx in transactions if int(tx["value"]) / 10**18 > 1000])
+
+                    # ML-prediksjon
+                    features = np.array([[sentiment_score, whale_txs, rsi]])
+                    prediction = model.predict(features)[0]
+                    confidence = model.predict_proba(features)[0].max()
+                    logger.info(f"ML Prediction for {coin}: {'Up' if prediction == 1 else 'Down'} with confidence {confidence:.2f}")
+
+                    # Kombiner breakout og ML-prediksjon
+                    if price_change >= 2.5 and time_diff_minutes <= 15 and rsi < 80 and prediction == 1:
+                        entry = current_price
+                        target = entry * 1.08
+                        stop = entry * 0.96
+                        message = (f"Buy {coin.split('/')[0]}, 2.5% breakout at ${entry:.2f} over {time_diff_minutes:.1f} minutes\n"
+                                   f"Trade opened: Entry ${entry:.2f}, Target ${target:.2f}, Stop ${stop:.2f}\n"
+                                   f"ML Confidence: {confidence:.2f}")
+                        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+                        logger.info(f"Signal sent for {coin}: {message}")
+                        signal_cooldown[coin] = datetime.utcnow()
+
+                        # Legg til data for online læring
+                        training_data.append([sentiment_score, whale_txs, rsi])
+                        training_labels.append(1 if price_change > 0 else 0)
+
+                    # Online læring: Oppdater modellen daglig hvis vi har nok data
+                    if len(training_data) >= 10:
+                        model.n_estimators += 10
+                        model.fit(training_data, training_labels)
+                        joblib.dump(model, "rf_model.pkl")
+                        logger.info("ML model updated with new data.")
+                        training_data = []
+                        training_labels = []
+
+                except Exception as e:
+                    logger.error(f"Error scanning {coin}: {str(e)}")
+                
+                await asyncio.sleep(0.5)
+            
+            logger.info("Completed one scan cycle. Waiting 30 seconds...")
+            await asyncio.sleep(30)
+
+    except Exception as e:
+        logger.error(f"Fatal error: {str(e)}")
+        sys.exit(1)
+    finally:
+        news_task.cancel()
+        whale_task.cancel()
+
+if __name__ == "__main__":
+    asyncio.run(main())
