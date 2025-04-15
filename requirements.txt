@@ -11,3 +11,4 @@ scikit-learn
 joblib
 numpy
 xgboost
+praw  # Lagt til for Reddit i analysemotor.py
