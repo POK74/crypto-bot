@@ -80,9 +80,9 @@ async def fetch_and_analyze_news(coins, bot, chat_id):
                     avg_sentiment = sentiment_score / len(ticker_headlines)
                     logger.info(f"Sentiment for {coin}: {avg_sentiment:.2f} (based on {len(ticker_headlines)} headlines)")
                     if avg_sentiment > 0.5:
-                        message = f"Forventer sterk prisstigning for {coin} basert på nyheter i markedet (sentiment: {avg_sentiment:.2f})"
+                        message = f"📈 Potential Buy Signal for {coin}: Strong positive sentiment ({avg_sentiment:.2f}) based on recent news"
                         await bot.send_message(chat_id=chat_id, text=message)
-                        logger.info(f"Prediction sent for {coin}: {message}")
+                        logger.info(f"News-based prediction sent for {coin}: {message}")
             
             logger.info("Completed one news scan cycle. Waiting 5 minutes...")
             await asyncio.sleep(300)
@@ -91,7 +91,7 @@ async def fetch_and_analyze_news(coins, bot, chat_id):
         logger.error(f"Error in news analysis: {str(e)}")
 
 # Funksjon for å hente whale-aktivitet fra Etherscan
-async def fetch_whale_activity(bot, chat_id):
+async def fetch_whale_activity(coins, bot, chat_id):
     try:
         whale_threshold = 1000
         headers = {'User-Agent': 'Mozilla/5.0'}
@@ -139,7 +139,7 @@ async def main():
         # Koble til Telegram
         logger.info("Connecting to Telegram...")
         bot = Bot(token=TELEGRAM_BOT_TOKEN)
-        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text="🤖 Bot started, scanning 30 coins, news, and whale activity...")
+        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text="🤖 Bot started, scanning 33 coins, news, and whale activity...")
         logger.info("Connected to Telegram.")
 
         # Koble til live Binance API
@@ -158,21 +158,23 @@ async def main():
             logger.error(f"Failed to load ML model: {str(e)}. Starting with a fresh model.")
             model = RandomForestClassifier(n_estimators=100, warm_start=True)
 
-        # Myntliste
+        # Myntliste (lagt til ACH, AERGO, MDT)
         coins = ["SOL/USDT", "AVAX/USDT", "DOGE/USDT", "SHIB/USDT", "ADA/USDT", 
                  "XRP/USDT", "JASMY/USDT", "FLOKI/USDT", "PEPE/USDT", "API3/USDT", 
                  "BONK/USDT", "WIF/USDT", "POPCAT/USDT", "NEIRO/USDT", "TURBO/USDT", 
-                 "MEME/USDT", "BOME/USDT", "TON/USDT", "SUI/USDT", "APT/USDT", 
+                 "MEME/USDT", "BOME/USDT", "TON/USDT", "S pleural effusion/UI/USDT", "APT/USDT", 
                  "LINK/USDT", "DOT/USDT", "MATIC/USDT", "NEAR/USDT", "RUNE/USDT", 
-                 "INJ/USDT", "FTM/USDT", "GALA/USDT", "HBAR/USDT", "ORDI/USDT"]
+                 "INJ/USDT", "FTM/USDT", "GALA/USDT", "HBAR/USDT", "ORDI/USDT",
+                 "ACH/USDT", "AERGO/USDT", "MDT/USDT"]
 
         # Dictionary for å holde styr på cooldown for hver mynt
-        signal_cooldown = {coin: None for coin in coins}
+        breakout_cooldown = {coin: None for coin in coins}
+        ml_cooldown = {coin: None for coin in coins}
         COOLDOWN_MINUTES = 60
 
         # Start nyhetsanalyse og whale-aktivitet i parallelle oppgaver
         news_task = asyncio.create_task(fetch_and_analyze_news(coins, bot, TELEGRAM_CHAT_ID))
-        whale_task = asyncio.create_task(fetch_whale_activity(bot, TELEGRAM_CHAT_ID))
+        whale_task = asyncio.create_task(fetch_whale_activity(coins, bot, TELEGRAM_CHAT_ID))
 
         # Data for online læring
         training_data = []
@@ -182,15 +184,6 @@ async def main():
         while True:
             for coin in coins:
                 try:
-                    # Sjekk om mynten er i cooldown
-                    if signal_cooldown[coin]:
-                        time_since_signal = (datetime.utcnow() - signal_cooldown[coin]).total_seconds() / 60
-                        if time_since_signal < COOLDOWN_MINUTES:
-                            logger.info(f"{coin}: In cooldown, {COOLDOWN_MINUTES - time_since_signal:.1f} minutes remaining")
-                            continue
-                        else:
-                            signal_cooldown[coin] = None
-
                     # Hent OHLCV-data for siste 15 minutter
                     ohlcv = exchange.fetch_ohlcv(coin, timeframe='1m', limit=15)
                     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
@@ -235,27 +228,47 @@ async def main():
                                 transactions = data["result"][:10]
                                 whale_txs = len([tx for tx in transactions if int(tx["value"]) / 10**18 > 1000])
 
-                    # ML-prediksjon (med navngitte funksjoner for å unngå advarsel)
+                    # ML-prediksjon
                     features = pd.DataFrame([[sentiment_score, whale_txs, rsi]], columns=['sentiment', 'whale_txs', 'rsi'])
                     prediction = model.predict(features)[0]
                     confidence = model.predict_proba(features)[0].max()
                     logger.info(f"ML Prediction for {coin}: {'Up' if prediction == 1 else 'Down'} with confidence {confidence:.2f}")
 
-                    # Kombiner breakout og ML-prediksjon
-                    if price_change >= 2.5 and time_diff_minutes <= 15 and rsi < 80 and prediction == 1:
+                    # Breakout-signal: 2.5% prisendring
+                    if breakout_cooldown[coin]:
+                        time_since_breakout = (datetime.utcnow() - breakout_cooldown[coin]).total_seconds() / 60
+                        if time_since_breakout < COOLDOWN_MINUTES:
+                            logger.info(f"{coin}: Breakout signal in cooldown, {COOLDOWN_MINUTES - time_since_breakout:.1f} minutes remaining")
+                        else:
+                            breakout_cooldown[coin] = None
+
+                    if not breakout_cooldown[coin] and price_change >= 2.5 and time_diff_minutes <= 15 and rsi < 80:
                         entry = current_price
                         target = entry * 1.08
                         stop = entry * 0.96
-                        message = (f"Buy {coin.split('/')[0]}, 2.5% breakout at ${entry:.2f} over {time_diff_minutes:.1f} minutes\n"
-                                   f"Trade opened: Entry ${entry:.2f}, Target ${target:.2f}, Stop ${stop:.2f}\n"
-                                   f"ML Confidence: {confidence:.2f}")
+                        message = (f"📈 Breakout Buy Signal for {coin.split('/')[0]}: {price_change:.2f}% increase at ${entry:.2f} over {time_diff_minutes:.1f} minutes\n"
+                                   f"Trade opened: Entry ${entry:.2f}, Target ${target:.2f}, Stop ${stop:.2f}")
                         await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-                        logger.info(f"Signal sent for {coin}: {message}")
-                        signal_cooldown[coin] = datetime.utcnow()
+                        logger.info(f"Breakout signal sent for {coin}: {message}")
+                        breakout_cooldown[coin] = datetime.utcnow()
 
-                        # Legg til data for online læring
-                        training_data.append([sentiment_score, whale_txs, rsi])
-                        training_labels.append(1 if price_change > 0 else 0)
+                    # ML-signal: Uavhengig av 2.5% breakout, hvis ML-prediksjon er "Up" med høy konfidens
+                    if ml_cooldown[coin]:
+                        time_since_ml = (datetime.utcnow() - ml_cooldown[coin]).total_seconds() / 60
+                        if time_since_ml < COOLDOWN_MINUTES:
+                            logger.info(f"{coin}: ML signal in cooldown, {COOLDOWN_MINUTES - time_since_ml:.1f} minutes remaining")
+                        else:
+                            ml_cooldown[coin] = None
+
+                    if not ml_cooldown[coin] and prediction == 1 and confidence >= 0.60:
+                        message = f"📈 ML Buy Signal for {coin.split('/')[0]}: Model predicts price increase with confidence {confidence:.2f}"
+                        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+                        logger.info(f"ML signal sent for {coin}: {message}")
+                        ml_cooldown[coin] = datetime.utcnow()
+
+                    # Legg til data for online læring
+                    training_data.append([sentiment_score, whale_txs, rsi])
+                    training_labels.append(1 if price_change > 0 else 0)
 
                     # Online læring: Oppdater modellen daglig hvis vi har nok data
                     if len(training_data) >= 10:
