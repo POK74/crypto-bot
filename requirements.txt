@@ -7,3 +7,6 @@ requests
 beautifulsoup4
 textblob
 aiohttp
+scikit-learn
+joblib
+numpy
