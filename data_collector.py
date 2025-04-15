@@ -19,7 +19,7 @@ error_log_limit = 5  # Maks antall ganger vi logger samme feil
 
 async def fetch_top_coins():
     max_retries = 3
-    retry_delay = 10  # Start med 10 sekunders forsinkelse
+    retry_delay = 10
     for attempt in range(max_retries):
         async with aiohttp.ClientSession() as session:
             try:
@@ -32,7 +32,7 @@ async def fetch_top_coins():
                             logger.error(f"Error fetching top coins: {response.status}")
                             error_log_counter[error_key] = error_log_counter.get(error_key, 0) + 1
                         if attempt < max_retries - 1:
-                            await asyncio.sleep(retry_delay * (2 ** attempt))  # Eksponentiell backoff
+                            await asyncio.sleep(retry_delay * (2 ** attempt))
                             continue
                         return []
                     elif response.status != 200:
@@ -60,7 +60,7 @@ async def fetch_price_data(coin):
                 "enableRateLimit": True,
             })
             symbol = f"{coin}/USDT"
-            ohlcv = await exchange.fetch_ohlcv(symbol, timeframe="1h", limit=168)  # 1 uke med 1-times data
+            ohlcv = await exchange.fetch_ohlcv(symbol, timeframe="1h", limit=168)
             await exchange.close()
             df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
             df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
@@ -71,82 +71,9 @@ async def fetch_price_data(coin):
 
 async def fetch_historical_data_for_training(coin, days=90):
     """
-    Henter historiske data for trening av ML-modellen.
-    Prøver først CoinGecko, deretter Binance som fallback.
+    Henter historiske data for trening av ML-modellen fra Binance.
     """
-    # Prøv CoinGecko først
-    max_retries = 3
-    retry_delay = 10
-    symbol_to_id = {
-        "BTC": "bitcoin",
-        "ETH": "ethereum",
-        "BNB": "binancecoin",
-        "SOL": "solana",
-        "ADA": "cardano",
-    }
-    coin_id = symbol_to_id.get(coin)
-    if not coin_id:
-        logger.error(f"No CoinGecko ID mapping for {coin}")
-        return None
-
-    # Prøv både demo og pro API-nøkkel
-    api_key_params = [
-        {"x_cg_demo_api_key": os.getenv("COINGECKO_API_KEY")},
-        {"x-cg-api-key": os.getenv("COINGECKO_API_KEY")},
-    ]
-
-    for params in api_key_params:
-        for attempt in range(max_retries):
-            async with aiohttp.ClientSession() as session:
-                try:
-                    end_timestamp = int(datetime.now().timestamp())
-                    start_timestamp = int((datetime.now() - timedelta(days=days)).timestamp())
-                    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart/range?vs_currency=usd&from={start_timestamp}&to={end_timestamp}&interval=hourly"
-                    async with session.get(url, params=params) as response:
-                        if response.status == 429:
-                            error_key = f"fetch_historical_{coin}_429"
-                            if error_log_counter.get(error_key, 0) < error_log_limit:
-                                logger.error(f"Error fetching historical data for {coin}: {response.status}")
-                                error_log_counter[error_key] = error_log_counter.get(error_key, 0) + 1
-                            if attempt < max_retries - 1:
-                                await asyncio.sleep(retry_delay * (2 ** attempt))
-                                continue
-                            return None
-                        elif response.status != 200:
-                            error_key = f"fetch_historical_{coin}_{response.status}"
-                            if error_log_counter.get(error_key, 0) < error_log_limit:
-                                logger.error(f"Error fetching historical data for {coin}: {response.status}")
-                                error_log_counter[error_key] = error_log_counter.get(error_key, 0) + 1
-                            return None
-                        data = await response.json()
-                        prices = data.get("prices", [])
-                        volumes = data.get("total_volumes", [])
-                        if not prices or not volumes:
-                            logger.error(f"No price or volume data for {coin}")
-                            return None
-                        timestamps = [pd.to_datetime(price[0], unit="ms") for price in prices]
-                        close_prices = [price[1] for price in prices]
-                        volumes = [volume[1] for volume in volumes]
-                        df = pd.DataFrame({
-                            "timestamp": timestamps,
-                            "close": close_prices,
-                            "volume": volumes
-                        })
-                        df["next_close"] = df["close"].shift(-1)
-                        df["label"] = np.where(df["next_close"] > df["close"], 1, 0)
-                        df = df.dropna()
-                        logger.info(f"Fetched {len(df)} historical data points for {coin} from CoinGecko")
-                        return df
-                except Exception as e:
-                    error_key = f"fetch_historical_{coin}_exception"
-                    if error_log_counter.get(error_key, 0) < error_log_limit:
-                        logger.error(f"Error fetching historical training data for {coin} from CoinGecko: {str(e)}")
-                        error_log_counter[error_key] = error_log_counter.get(error_key, 0) + 1
-                    return None
-            await asyncio.sleep(retry_delay * (2 ** attempt))
-
-    # Fallback til Binance API
-    logger.warning(f"Could not fetch historical data for {coin} from CoinGecko, falling back to Binance")
+    logger.info(f"Fetching historical training data for {coin} from Binance")
     try:
         exchange = ccxt.binance({
             "apiKey": os.getenv("BINANCE_API_KEY"),
@@ -157,6 +84,9 @@ async def fetch_historical_data_for_training(coin, days=90):
         since = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
         ohlcv = await exchange.fetch_ohlcv(symbol, timeframe="1h", since=since, limit=days * 24)
         await exchange.close()
+        if not ohlcv:
+            logger.error(f"No historical data returned for {coin} from Binance")
+            return None
         df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         df["next_close"] = df["close"].shift(-1)
@@ -185,9 +115,9 @@ async def fetch_news(coin):
             return []
 
 async def fetch_whale_transactions(coin):
-    whale_threshold = 100000  # $100,000 terskel
+    whale_threshold = 100000
     whale_addresses = {
-        "BTC": "3E5Kz9J4LmxmyW5t3xEuL9eS5nA3kK1Kq",  # Annen aktiv Binance-adresse
+        "BTC": "3E5Kz9J4LmxmyW5t3xEuL9eS5nA3kK1Kq",
         "ETH": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
         "BNB": "0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E",
         "SOL": "5qXynUYqTNUeLDqNxZ2asgYyH2i4Dt5kS6v5nP8W4k6",
@@ -217,7 +147,6 @@ async def fetch_whale_transactions(coin):
             header = headers.get(coin, {})
             async with session.get(url, headers=header) as response:
                 if response.status != 200:
-                    # Logg hele responsen for feilsøking
                     error_text = await response.text()
                     logger.error(f"Error fetching whale transactions for {coin}: {response.status} - {error_text}")
                     return []
