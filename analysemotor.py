@@ -18,25 +18,26 @@ class Analyzer:
 
     def fit(self, X, y=None):
         try:
-            # Tren scaler
+            # Tren scaler med data
             self.scaler.fit(X)
-            # Tren modellen (forutsatt at vi har etiketter)
+            # Tren modellen hvis etiketter er gitt
             if y is not None:
-                self.model.fit(X, y)
+                scaled_X = self.scaler.transform(X)
+                self.model.fit(scaled_X, y)
             else:
-                # Hvis ingen etiketter, bruk en enkel regelbasert tilnærming
                 logger.warning("No labels provided, using default model")
             self.is_fitted = True
+            logger.info("Analyzer successfully fitted")
         except Exception as e:
             logger.error(f"Error fitting analyzer: {str(e)}")
+            raise
 
     def analyze_data(self, data):
         try:
+            if not self.is_fitted:
+                raise ValueError("Analyzer is not fitted. Call 'fit' with training data first.")
             # Konverter data til numpy array
             X = np.array(data)
-            if not self.is_fitted:
-                logger.warning("Scaler is not fitted, fitting with current data")
-                self.fit(X)
             # Skaler data
             scaled_data = self.scaler.transform(X)
             # Forutsig med modellen
@@ -44,4 +45,4 @@ class Analyzer:
             return prediction.tolist()
         except Exception as e:
             logger.error(f"Error in analyze_data: {str(e)}")
-            return []
+            raise
