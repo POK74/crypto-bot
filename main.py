@@ -2,10 +2,10 @@ import os
 import asyncio
 import logging
 import numpy as np
-from telegram_handler import send_telegram_message
-from data_collector import fetch_top_coins, fetch_price_data, fetch_news, fetch_whale_transactions
-from analysemotor import Analyzer
 import pandas as pd
+from telegram_handler import send_telegram_message
+from data_collector import fetch_top_coins, fetch_price_data, fetch_news, fetch_whale_transactions, fetch_historical_data_for_training
+from analysemotor import Analyzer
 
 # Konfigurer logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -39,12 +39,36 @@ async def main():
     # Initialiser Analyzer
     analyzer = Analyzer()
 
-    # Generer et enkelt treningsdatasett for å trene StandardScaler og XGBoost
-    np.random.seed(42)
-    train_data = np.random.rand(100, 2) * 1000  # Tilfeldige verdier for close og volume
-    train_labels = np.random.randint(0, 2, 100)  # Tilfeldige etiketter (0 eller 1)
-    analyzer.fit(train_data, train_labels)
-    logger.info("Analyzer fitted with training data")
+    # Hent historiske data for trening
+    coins_to_train = ["BTC", "ETH", "BNB", "SOL", "ADA"]
+    train_data_list = []
+    train_labels_list = []
+    
+    for coin in coins_to_train:
+        df = await fetch_historical_data_for_training(coin, days=90)
+        if df is not None and not df.empty:
+            # Forbered data: close og volume som funksjoner, label som etikett
+            features = df[["close", "volume"]].values
+            labels = df["label"].values
+            train_data_list.append(features)
+            train_labels_list.append(labels)
+        else:
+            logger.warning(f"Could not fetch training data for {coin}")
+    
+    # Kombiner data fra alle mynter
+    if train_data_list and train_labels_list:
+        train_data = np.vstack(train_data_list)
+        train_labels = np.hstack(train_labels_list)
+        analyzer.fit(train_data, train_labels)
+        logger.info(f"Analyzer fitted with {len(train_data)} data points from historical data")
+    else:
+        logger.error("No training data available, using fallback random data")
+        # Fallback til tilfeldige data hvis vi ikke får historiske data
+        np.random.seed(42)
+        train_data = np.random.rand(100, 2) * 1000
+        train_labels = np.random.randint(0, 2, 100)
+        analyzer.fit(train_data, train_labels)
+        logger.info("Analyzer fitted with fallback random data")
 
     # Liste over stablecoins å ekskludere
     stablecoins = ["USDT", "USDC", "USDS", "BSC-USD", "USDE", "BUIDL", "FDUSD", "PYUSD"]
@@ -90,9 +114,9 @@ async def main():
                     data = df[["close", "volume"]].tail(1).values
                     current_price = df["close"].iloc[-1]
                     try:
-                        prediction = analyzer.analyze_data(data, current_price)
+                        prediction = analyzer.analyze_data(data, current_price, coin)  # Send med coin for bedre meldinger
                         if prediction:
-                            message = prediction  # Meldingen genereres i analysemotor.py
+                            message = prediction
                             await send_telegram_message(message)
                             logger.info(f"ML signal sent for {coin}/USDT")
                     except Exception as e:
