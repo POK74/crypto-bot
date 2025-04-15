@@ -10,17 +10,18 @@ import xgboost as xgb
 from telegram_handler import send_telegram_message
 from data_collector import get_top_100_coins
 import analysemotor
+import os
 
 # Logger setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuration
-BINANCE_API_KEY = "your_binance_api_key"
-BINANCE_API_SECRET = "your_binance_api_secret"
-ETHERSCAN_API_KEY = "your_etherscan_api_key"
-BSCSCAN_API_KEY = "your_bscscan_api_key"
-BLOCKFROST_API_KEY = "your_blockfrost_api_key"
+BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
+BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
+ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY")
+BSCSCAN_API_KEY = os.getenv("BSCSCAN_API_KEY")
+BLOCKFROST_API_KEY = os.getenv("BLOCKFROST_API_KEY")
 
 # ML Model Setup (XGBoost)
 scaler = StandardScaler()
@@ -117,6 +118,9 @@ async def main():
         'enableRateLimit': True,
     })
     
+    # Teller for å kjøre analysemotoren kun hver 48. time
+    analysemotor_counter = 0
+    
     while True:
         try:
             # Fetch top 100 coins
@@ -184,8 +188,11 @@ async def main():
                     await send_telegram_message(message)
                     logger.info(f"Whale alert sent for {coin}")
 
-            # Run Analysemotor (for advanced news analysis)
-            await analysemotor.run_analysis(top_100_coins)
+            # Run Analysemotor (for advanced news analysis) every 48 hours
+            analysemotor_counter += 1
+            if analysemotor_counter >= 192:  # 192 * 15 min = 48 hours
+                await analysemotor.run_analysis(top_100_coins)
+                analysemotor_counter = 0
 
         except Exception as e:
             logger.error(f"Error in main loop: {e}")
