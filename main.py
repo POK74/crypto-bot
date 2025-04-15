@@ -27,6 +27,9 @@ logger = logging.getLogger(__name__)
 
 logger.info("Starting bot...")
 
+# Global variabel for Etherscan API URL
+ETHSCAN_API_URL = "https://api.etherscan.io/api?module=account&action=txlist&address=0x0000000000000000000000000000000000000000&sort=desc&apikey=XUKZ1QH46941VJNH9U8CSQN7XVNTRNYKV7"
+
 # Funksjon for å hente nyheter og reguleringsdata fra RSS og X
 async def fetch_and_analyze_news(coins, bot, chat_id):
     try:
@@ -90,13 +93,12 @@ async def fetch_and_analyze_news(coins, bot, chat_id):
 # Funksjon for å hente whale-aktivitet fra Etherscan
 async def fetch_whale_activity(bot, chat_id):
     try:
-        etherscan_api_url = "https://api.etherscan.io/api?module=account&action=txlist&address=0x0000000000000000000000000000000000000000&sort=desc&apikey=XUKZ1QH46941VJNH9U8CSQN7XVNTRNYKV7"
         whale_threshold = 1000
         headers = {'User-Agent': 'Mozilla/5.0'}
         
         while True:
             async with aiohttp.ClientSession() as session:
-                async with session.get(etherscan_api_url, headers=headers) as resp:
+                async with session.get(ETHSCAN_API_URL, headers=headers) as resp:
                     data = await resp.json()
                     if data["status"] != "1":
                         logger.error(f"Etherscan API error: {data['message']}")
@@ -162,7 +164,7 @@ async def main():
                  "BONK/USDT", "WIF/USDT", "POPCAT/USDT", "NEIRO/USDT", "TURBO/USDT", 
                  "MEME/USDT", "BOME/USDT", "TON/USDT", "SUI/USDT", "APT/USDT", 
                  "LINK/USDT", "DOT/USDT", "MATIC/USDT", "NEAR/USDT", "RUNE/USDT", 
-                 "INJ/USDT", "FTM/USDT", "GALA/USDT", "HB Search for more...AR/USDT", "ORDI/USDT"]
+                 "INJ/USDT", "FTM/USDT", "GALA/USDT", "HBAR/USDT", "ORDI/USDT"]
 
         # Dictionary for å holde styr på cooldown for hver mynt
         signal_cooldown = {coin: None for coin in coins}
@@ -227,7 +229,7 @@ async def main():
                     # Hent whale-aktivitet (for enkelhet, bare for ETH som en proxy)
                     whale_txs = 0
                     async with aiohttp.ClientSession() as session:
-                        async with session.get(etherscan_api_url) as resp:
+                        async with session.get(ETHSCAN_API_URL) as resp:
                             data = await resp.json()
                             if data["status"] == "1":
                                 transactions = data["result"][:10]
