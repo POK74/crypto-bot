@@ -12,6 +12,10 @@ logger = logging.getLogger(__name__)
 price_cache = {}
 cache_duration = 300  # Cache priser i 5 minutter (300 sekunder)
 
+# Begrens gjentatte feilmeldinger i loggen
+error_log_counter = {}
+error_log_limit = 5  # Maks antall ganger vi logger samme feil
+
 async def fetch_top_coins():
     async with aiohttp.ClientSession() as session:
         try:
@@ -94,6 +98,8 @@ async def fetch_whale_transactions(coin):
                     logger.error(f"Error fetching whale transactions for {coin}: {response.status}")
                     return []
                 data = await response.json()
+                # Hent prisen én gang for hele settet med transaksjoner
+                price = await get_current_price(coin)
                 if coin in ["ETH", "BNB"]:
                     if data.get("status") != "1":
                         logger.error(f"Error fetching whale transactions for {coin}: {data.get('message')}")
@@ -106,11 +112,12 @@ async def fetch_whale_transactions(coin):
                     large_transactions = []
                     for tx in transactions:
                         value = float(tx.get("value", 0)) / 1e18
-                        price = await get_current_price(coin)
                         usd_value = value * price
                         if usd_value > whale_threshold:
                             large_transactions.append(tx)
-                        await asyncio.sleep(0.2)  # Forsinkelse for å unngå rate limits
+                        await asyncio.sleep(1.0)  # Økt forsinkelse til 1 sekund
+                    logger.info(f"Found {len(large_transactions)} large transactions for {coin}")
+                    return large_transactions
                 elif coin == "ADA":
                     transactions = data
                     if not transactions:
@@ -119,11 +126,12 @@ async def fetch_whale_transactions(coin):
                     large_transactions = []
                     for tx in transactions:
                         amount = float(tx.get("amount", 0)) / 1e6
-                        price = await get_current_price(coin)
                         usd_value = amount * price
                         if usd_value > whale_threshold:
                             large_transactions.append(tx)
-                        await asyncio.sleep(0.2)
+                        await asyncio.sleep(1.0)
+                    logger.info(f"Found {len(large_transactions)} large transactions for {coin}")
+                    return large_transactions
                 else:
                     transactions = data
                     if not transactions:
@@ -132,12 +140,12 @@ async def fetch_whale_transactions(coin):
                     large_transactions = []
                     for tx in transactions:
                         amount = float(tx.get("amount", 0))
-                        price = await get_current_price(coin)
                         usd_value = amount * price
                         if usd_value > whale_threshold:
                             large_transactions.append(tx)
-                        await asyncio.sleep(0.2)
-                return large_transactions
+                        await asyncio.sleep(1.0)
+                    logger.info(f"Found {len(large_transactions)} large transactions for {coin}")
+                    return large_transactions
         except Exception as e:
             logger.error(f"Error fetching whale transactions for {coin}: {str(e)}")
             return []
@@ -151,17 +159,37 @@ async def get_current_price(coin):
             if (datetime.now().timestamp() - timestamp) < cache_duration:
                 return price
 
-        try:
-            url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin.lower()}&vs_currencies=usd"
-            async with session.get(url) as response:
-                if response.status != 200:
-                    logger.error(f"Error fetching price for {coin}: {response.status}")
-                    return 1  # Fallback til 1 for å unngå divisjon med 0
-                data = await response.json()
-                price = data.get(coin.lower(), {}).get("usd", 1)
-                # Lagre i cachen
-                price_cache[cache_key] = (price, datetime.now().timestamp())
-                return price
-        except Exception as e:
-            logger.error(f"Error fetching price for {coin}: {str(e)}")
-            return 1
+        max_retries = 3
+        retry_delay = 10  # Vent 10 sekunder ved 429-feil
+        for attempt in range(max_retries):
+            try:
+                url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin.lower()}&vs_currencies=usd"
+                async with session.get(url) as response:
+                    if response.status == 429:
+                        error_key = f"fetch_price_{coin}_429"
+                        if error_log_counter.get(error_key, 0) < error_log_limit:
+                            logger.error(f"Error fetching price for {coin}: {response.status}")
+                            error_log_counter[error_key] = error_log_counter.get(error_key, 0) + 1
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(retry_delay)
+                            continue
+                        else:
+                            return 1  # Fallback til 1
+                    elif response.status != 200:
+                        error_key = f"fetch_price_{coin}_{response.status}"
+                        if error_log_counter.get(error_key, 0) < error_log_limit:
+                            logger.error(f"Error fetching price for {coin}: {response.status}")
+                            error_log_counter[error_key] = error_log_counter.get(error_key, 0) + 1
+                        return 1
+                    data = await response.json()
+                    price = data.get(coin.lower(), {}).get("usd", 1)
+                    # Lagre i cachen
+                    price_cache[cache_key] = (price, datetime.now().timestamp())
+                    return price
+            except Exception as e:
+                error_key = f"fetch_price_{coin}_exception"
+                if error_log_counter.get(error_key, 0) < error_log_limit:
+                    logger.error(f"Error fetching price for {coin}: {str(e)}")
+                    error_log_counter[error_key] = error_log_counter.get(error_key, 0) + 1
+                return 1
+        return 1  # Fallback til 1 hvis alle forsøk feiler
