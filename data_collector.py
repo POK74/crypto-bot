@@ -47,7 +47,7 @@ async def fetch_top_coins(limit: int = None) -> list:
             "order": "market_cap_desc",
             "per_page": limit,
             "page": 1,
-            "sparkline": False
+            "sparkline": "false"
         }
 
         async with aiohttp.ClientSession(headers=HEADERS) as session:
