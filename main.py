@@ -61,7 +61,7 @@ async def main():
                 for tx in whale_transactions:
                     price = await get_current_price(coin)
                     if coin == "BTC":
-                        total_value = sum(int(out.get("value", 0)) for out in tx.get("outputs", [])) / 1e8
+                        total_value = sum(int(out.get("value", 0)) for out in tx.get("out", [])) / 1e8
                     elif coin in ["ETH", "BNB"]:
                         total_value = float(tx.get("value", 0)) / 1e18
                     else:
@@ -77,10 +77,10 @@ async def main():
                     window = 20
                     df['ma'] = df['close'].rolling(window=window).mean()
                     df['std'] = df['close'].rolling(window=window).std()
-                    df['upper_band'] = df['ma'] + (df['std'] * 1.0)  # Senket til 1.0
-                    df['lower_band'] = df['ma'] - (df['std'] * 1.0)
+                    df['upper_band'] = df['ma'] + (df['std'] * 0.5)  # Senket til 0.5
+                    df['lower_band'] = df['ma'] - (df['std'] * 0.5)
                     latest = df.iloc[-1]
-                    logger.info(f"{coin}/USDT - Price: {latest['close']:.2f}, Upper Band: {latest['upper_band']:.2f}, Lower Band: {latest['lower_band']:.2f}")
+                    logger.info(f"{coin}/USDT - Price: {latest['close']:.2f}, MA: {latest['ma']:.2f}, Std: {latest['std']:.2f}, Upper Band: {latest['upper_band']:.2f}, Lower Band: {latest['lower_band']:.2f}")
                     if latest['close'] > latest['upper_band']:
                         message = f"🚨 Breakout Signal: {coin}/USDT\nPrice: ${latest['close']:.2f}\nAbove Upper Bollinger Band: ${latest['upper_band']:.2f}"
                         await send_telegram_message(message)
