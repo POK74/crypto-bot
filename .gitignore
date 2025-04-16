@@ -1,46 +1,36 @@
-# 🐍 Python- og bytekodefiler
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 
-# 🔒 Miljøvariabler og hemmelige nøkler
+# Caches and logs
+logs/
+*.log
+volume_cache.json
+signal_history.json
+
+# Environment
 .env
 .env.*
-*.secret
-*.token
 
-# 📦 Pakkefiler og distribusjon
-dist/
-build/
-*.egg-info/
-*.tar.gz
-
-# 📊 Analyse-, cache- og testdata
-*.csv
-*.xlsx
-*.json
-*.log
-*.tmp
-logs/
-reports/
-charts/
-volume_cache.json
-sentiment_cache.json
-whale_cache.json
-signal_boost_cache.json
-mock_prices.json
-test_run_output.log
-
-# 🔧 Editor/IDE og prosjektinnstillinger
+# Editor metadata
 .vscode/
 .idea/
-*.sublime-project
-*.sublime-workspace
 
-# 💻 OS- og metadatafiler
+# Jupyter / notebooks / dev tools
+*.ipynb
+.ipynb_checkpoints/
+
+# Deployment / build artifacts
+*.egg-info/
+dist/
+build/
+
+# Backup or temp files
+*.bak
+*.tmp
+*~
+
+# OS files
 .DS_Store
 Thumbs.db
-
-# 📓 Notebook-filer og checkpoints (valgfritt)
-*.ipynb
-*.ipynb_checkpoints
