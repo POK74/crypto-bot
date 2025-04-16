@@ -1,6 +1,1 @@
-aiohttp
-ccxt
-pandas
-matplotlib
-numpy
-python-dotenv
+# requirements.txt - midlertidig plassholderinnhold
