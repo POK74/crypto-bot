@@ -18,6 +18,12 @@ HEADERS = {
 if API_KEY:
     HEADERS["x-cg-pro-api-key"] = API_KEY
 
+COIN_ID_OVERRIDES = {
+    "ripple": "xrp",
+    "binancecoin": "bnb",
+    # legg til flere hvis nødvendig
+}
+
 async def fetch_top_coins(limit: int = None) -> list:
     try:
         env_limit_raw = os.getenv("COIN_LIMIT", "20")
@@ -41,8 +47,7 @@ async def fetch_top_coins(limit: int = None) -> list:
             "order": "market_cap_desc",
             "per_page": limit,
             "page": 1,
-            "sparkline": "false"
-
+            "sparkline": False
         }
 
         async with aiohttp.ClientSession(headers=HEADERS) as session:
@@ -58,6 +63,10 @@ async def fetch_top_coins(limit: int = None) -> list:
         return []
 
 async def fetch_historical_data_for_training(coin_id: str, days: int = 2) -> list:
+    # Override kjent navn hvis nødvendig
+    original_id = coin_id
+    coin_id = COIN_ID_OVERRIDES.get(coin_id, coin_id)
+
     url = f"{COINGECKO_API_BASE}/coins/{coin_id}/market_chart"
     params = {
         "vs_currency": "usd",
@@ -66,10 +75,12 @@ async def fetch_historical_data_for_training(coin_id: str, days: int = 2) -> lis
     }
 
     try:
+        logger.debug(f"Henter historiske data for {original_id} → {coin_id}: {url} med params {params}")
         async with aiohttp.ClientSession(headers=HEADERS) as session:
             async with session.get(url, params=params) as resp:
                 if resp.status != 200:
-                    logger.error(f"Feil ved henting av historiske data for {coin_id}: HTTP {resp.status}")
+                    err_text = await resp.text()
+                    logger.error(f"Feil ved henting av historiske data for {original_id} (som {coin_id}): HTTP {resp.status} - {err_text}")
                     return []
                 data = await resp.json()
                 prices = data.get("prices", [])
