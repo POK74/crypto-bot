@@ -1,5 +1,3 @@
-# telegram_handler.py
-
 import aiohttp
 import asyncio
 import os

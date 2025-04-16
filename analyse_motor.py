@@ -1,8 +1,10 @@
-# analyse_motor.py
-
-import numpy as np
+import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
+import numpy as np
+
+from data_collector import fetch_prices
+from telegram_handler import send_telegram_message
 
 logger = logging.getLogger(__name__)
 
@@ -35,3 +37,37 @@ def analyze_signals(prices, coin):
 
     return score, details
 
+async def run_signal_scan():
+    coins = ["bitcoin", "ethereum", "solana", "avalanche-2"]
+    signals_found = 0
+
+    for coin in coins:
+        try:
+            prices = await fetch_prices(coin, hours=48)
+            score, details = analyze_signals(prices, coin)
+
+            if score >= 60:
+                signals_found += 1
+                message = (
+                    f"🚀 **Buy Signal!**\n\n"
+                    f"📌 **Coin:** {coin.capitalize()}\n"
+                    f"📅 **Time:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}\n"
+                    f"💯 **Score:** {score}/100\n"
+                    f"---\n"
+                    f"{details}"
+                )
+                await send_telegram_message(message)
+                logger.info(f"Signal sent for {coin}: Score {score}")
+            else:
+                logger.info(f"No strong signal for {coin}: Score {score}")
+
+        except Exception as e:
+            logger.error(f"Error analyzing {coin}: {e}")
+
+    if signals_found == 0:
+        logger.info("No signals found this round.")
+    else:
+        logger.info(f"Total signals sent: {signals_found}")
+
+if __name__ == "__main__":
+    asyncio.run(run_signal_scan())
