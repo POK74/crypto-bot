@@ -1,4 +1,5 @@
 aiohttp==3.9.3
-ccxt==4.1.94
 python-dotenv==1.0.1
+requests==2.31.0
+beautifulsoup4==4.12.3
 numpy==1.26.4
