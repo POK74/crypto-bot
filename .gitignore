@@ -1,6 +1,30 @@
+# Byte-compiled / optimized / DLL files
 __pycache__/
-.env
+*.py[cod]
+*$py.class
+
+# Caches
 *.log
+*.tmp
+*.cache
+
+# Environments
+.env
+.env.*
+
+# VS Code settings
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Notebooks and data
+*.ipynb_checkpoints
 *.csv
+
+# Render logs
 logs/
-*.png
+trendboost_chart.png
+signals_today.log
+winrate_history.csv

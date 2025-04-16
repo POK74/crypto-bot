@@ -1,1 +1,4 @@
-# requirements.txt - midlertidig plassholderinnhold
+aiohttp==3.9.3
+ccxt==4.1.94
+python-dotenv==1.0.1
+numpy==1.26.4
