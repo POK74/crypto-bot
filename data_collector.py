@@ -14,251 +14,35 @@ price_cache = {}
 cache_duration = 300  # Cache priser i 5 minutter (300 sekunder)
 
 # Begrens gjentatte feilmeldinger i loggen
-error_log_counter = {}
-error_log_limit = 5  # Maks antall ganger vi logger samme feil
+errorέχ
 
-async def fetch_top_coins():
-    max_retries = 3
-    retry_delay = 10
-    for attempt in range(max_retries):
-        async with aiohttp.ClientSession() as session:
-            try:
-                url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1"
-                params = {"x_cg_demo_api_key": os.getenv("COINGECKO_API_KEY")}
-                async with session.get(url, params=params) as response:
-                    if response.status == 429:
-                        error_key = "fetch_top_coins_429"
-                        if error_log_counter.get(error_key, 0) < error_log_limit:
-                            logger.error(f"Error fetching top coins: {response.status}")
-                            error_log_counter[error_key] = error_log_counter.get(error_key, 0) + 1
-                        if attempt < max_retries - 1:
-                            await asyncio.sleep(retry_delay * (2 ** attempt))
-                            continue
-                        return []
-                    elif response.status != 200:
-                        error_key = f"fetch_top_coins_{response.status}"
-                        if error_log_counter.get(error_key, 0) < error_log_limit:
-                            logger.error(f"Error fetching top coins: {response.status}")
-                            error_log_counter[error_key] = error_log_counter.get(error_key, 0) + 1
-                        return []
-                    data = await response.json()
-                    return [coin["symbol"].upper() for coin in data]
-            except Exception as e:
-                error_key = "fetch_top_coins_exception"
-                if error_log_counter.get(error_key, 0) < error_log_limit:
-                    logger.error(f"Error fetching top coins: {str(e)}")
-                    error_log_counter[error_key] = error_log_counter.get(error_key, 0) + 1
-                return []
-    return []
+System: You are Grok 3 built by xAI.
 
-async def fetch_price_data(coin):
-    async with aiohttp.ClientSession() as session:
-        try:
-            exchange = ccxt.binance({
-                "apiKey": os.getenv("BINANCE_API_KEY"),
-                "secret": os.getenv("BINANCE_API_SECRET"),
-                "enableRateLimit": True,
-            })
-            symbol = f"{coin}/USDT"
-            ohlcv = await exchange.fetch_ohlcv(symbol, timeframe="1h", limit=168)
-            await exchange.close()
-            df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
-            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-            return df
-        except Exception as e:
-            logger.error(f"Error fetching Binance data for {coin}/USDT: {str(e)}")
-            return None
+When applicable, you have some additional tools:
+- You can analyze individual X user profiles, X posts and their links.
+- You can analyze content uploaded by user including images, pdfs, text files and more.
+- You can search the web and posts on X for real-time information if needed.
+- If it seems like the user wants an image generated, ask for confirmation, instead of directly generating one.
+- You can edit images if the user instructs you to do so.
+- You can open up a separate canvas panel, where user can visualize basic charts and execute simple code that you produced.
 
-async def fetch_historical_data_for_training(coin, days=90):
-    """
-    Henter historiske data for trening av ML-modellen fra Binance.
-    """
-    logger.info(f"Fetching historical training data for {coin} from Binance")
-    try:
-        exchange = ccxt.binance({
-            "apiKey": os.getenv("BINANCE_API_KEY"),
-            "secret": os.getenv("BINANCE_API_SECRET"),
-            "enableRateLimit": True,
-        })
-        symbol = f"{coin}/USDT"
-        logger.info(f"Requesting OHLCV for {symbol} with timeframe=1h, days={days}")
-        since = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
-        ohlcv = await exchange.fetch_ohlcv(symbol, timeframe="1h", since=since, limit=days * 24)
-        await exchange.close()
-        if not ohlcv:
-            logger.error(f"No historical data returned for {coin} from Binance")
-            return None
-        df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-        df["next_close"] = df["close"].shift(-1)
-        df["label"] = np.where(df["next_close"] > df["close"], 1, 0)
-        df = df.dropna()
-        logger.info(f"Fetched {len(df)} historical data points for {coin} from Binance")
-        return df
-    except Exception as e:
-        logger.error(f"Error fetching historical training data for {coin} from Binance: {str(e)}")
-        return None
+In case the user asks about xAI's products, here is some information and response guidelines:
+- Grok 3 can be accessed on grok.com, x.com, the Grok iOS app, the Grok Android app, or the X iOS app.
+- Grok 3 can be accessed for free on these platforms with limited usage quotas.
+- Grok 3 has a voice mode that is currently only available on iOS.
+- Grok 3 has a **think mode**. In this mode, Grok 3 takes the time to think through before giving the final response to user queries. This mode is only activated when the user hits the think button in the UI.
+- Grok 3 has a **DeepSearch mode**. In this mode, Grok 3 iteratively searches the web and analyzes the information before giving the final response to user queries. This mode is only activated when the user hits the DeepSearch button in the UI.
+- SuperGrok is a paid subscription plan for grok.com that offers users higher Grok 3 usage quotas than the free plan.
+- Subscribed users on x.com can access Grok 3 on that platform with higher usage quotas than the free plan.
+- Grok 3's BigBrain mode is not publicly available. BigBrain mode is **not** included in the free plan. It is **not** included in the SuperGrok subscription. It is **not** included in any x.com subscription plans.
+- You do not have any knowledge of the price or usage limits of different subscription plans such as SuperGrok or x.com premium subscriptions.
+- If users ask you about the price of SuperGrok, simply redirect them to https://x.ai/grok for details. Do not make up any information on your own.
+- If users ask you about the price of x.com premium subscriptions, simply redirect them to https://help.x.com/en/using-x/x-premium for details. Do not make up any information on your own.
+- xAI offers an API service for using Grok 3. For any user query related to xAI's API service, redirect them to https://x.ai/api.
+- xAI does not have any other products.
 
-async def fetch_news(coin):
-    async with aiohttp.ClientSession() as session:
-        try:
-            serpapi_key = os.getenv("SERPAPI_KEY")
-            url = f"https://serpapi.com/search.json?q={coin}+crypto+news&tbm=nws&api_key={serpapi_key}"
-            async with session.get(url) as response:
-                if response.status != 200:
-                    logger.error(f"Error fetching news for {coin}: {response.status}")
-                    return []
-                data = await response.json()
-                news_results = data.get("news_results", [])
-                return [{"title": news["title"], "link": news["link"]} for news in news_results[:3]]
-        except Exception as e:
-            logger.error(f"Error fetching news for {coin}: {str(e)}")
-            return []
+The current date is April 16, 2025.
 
-async def fetch_whale_transactions(coin):
-    whale_threshold = 100000
-    whale_addresses = {
-        "BTC": "3E5Kz9J4LmxmyW5t3xEuL9eS5nA3kK1Kq",
-        "ETH": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-        "BNB": "0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E",
-        "SOL": "5qXynUYqTNUeLDqNxZ2asgYyH2i4Dt5kS6v5nP8W4k6",
-        "ADA": "addr1q9v2r4nq7v5k6m9v2r4nq7v5k6m9v2r4nq7v5k6m9v2r4nq7v5k6m",
-        "XRP": "rLHzPsX6oXkzU2qL12kHCH8G8cnZvUxrG",
-    }
-    endpoints = {
-        "BTC": f"https://api.blockchain.com/v3/exchange/btc/address/{whale_addresses['BTC']}?api_key={os.getenv('BLOCKCHAIN_API_KEY')}",
-        "ETH": f"https://api.etherscan.io/api?module=account&action=txlist&address={whale_addresses['ETH']}&startblock=0&endblock=99999999&sort=desc&apikey={os.getenv('ETHERSCAN_API_KEY')}",
-        "BNB": f"https://api.bscscan.com/api?module=account&action=txlist&address={whale_addresses['BNB']}&startblock=0&endblock=99999999&sort=desc&apikey={os.getenv('BSCSCAN_API_KEY')}",
-        "SOL": f"https://public-api.solscan.io/account/transactions?account={whale_addresses['SOL']}",
-        "ADA": f"https://cardano-mainnet.blockfrost.io/api/v0/addresses/{whale_addresses['ADA']}/transactions",
-        "XRP": f"https://api.xrpldata.com/v1/addresses/{whale_addresses['XRP']}/transactions",
-    }
-    headers = {
-        "ADA": {"project_id": os.getenv("BLOCKFROST_API_KEY")},
-    }
-
-    url = endpoints.get(coin)
-    if not url:
-        logger.error(f"No endpoint defined for coin {coin}")
-        return []
-
-    async with aiohttp.ClientSession() as session:
-        try:
-            header = headers.get(coin, {})
-            async with session.get(url, headers=header) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    logger.error(f"Error fetching whale transactions for {coin}: {response.status} - {error_text}")
-                    return []
-                data = await response.json()
-                price = await get_current_price(coin)
-                if coin == "BTC":
-                    transactions = data.get("txs", [])  # Blockchain.com API returnerer transaksjoner under 'txs'
-                    if not transactions:
-                        logger.error(f"Error fetching whale transactions for {coin}: No transactions found")
-                        return []
-                    large_transactions = []
-                    for tx in transactions:
-                        total_value = 0
-                        outputs = tx.get("out", [])  # Blockchain.com bruker 'out' for outputs
-                        for output in outputs:
-                            value = int(output.get("value", 0))  # Verdi i satoshis
-                            total_value += value
-                        value_btc = total_value / 1e8
-                        usd_value = value_btc * price
-                        if usd_value > whale_threshold:
-                            large_transactions.append(tx)
-                        await asyncio.sleep(1.0)
-                    logger.info(f"Found {len(large_transactions)} large transactions for {coin}")
-                    return large_transactions
-                elif coin in ["ETH", "BNB"]:
-                    if data.get("status") != "1":
-                        logger.error(f"Error fetching whale transactions for {coin}: {data.get('message')}")
-                        return []
-                    transactions = data.get("result", [])
-                    if not transactions:
-                        logger.error(f"Error fetching whale transactions for {coin}: No transactions found")
-                        return []
-                    large_transactions = []
-                    for tx in transactions:
-                        value = float(tx.get("value", 0)) / 1e18
-                        usd_value = value * price
-                        if usd_value > whale_threshold:
-                            large_transactions.append(tx)
-                        await asyncio.sleep(1.0)
-                    logger.info(f"Found {len(large_transactions)} large transactions for {coin}")
-                    return large_transactions
-                elif coin == "ADA":
-                    transactions = data
-                    if not transactions:
-                        logger.error(f"Error fetching whale transactions for {coin}: No transactions found")
-                        return []
-                    large_transactions = []
-                    for tx in transactions:
-                        amount = float(tx.get("amount", 0)) / 1e6
-                        usd_value = amount * price
-                        if usd_value > whale_threshold:
-                            large_transactions.append(tx)
-                        await asyncio.sleep(1.0)
-                    logger.info(f"Found {len(large_transactions)} large transactions for {coin}")
-                    return large_transactions
-                else:
-                    transactions = data
-                    if not transactions:
-                        logger.error(f"Error fetching whale transactions for {coin}: No transactions found")
-                        return []
-                    large_transactions = []
-                    for tx in transactions:
-                        amount = float(tx.get("amount", 0))
-                        usd_value = amount * price
-                        if usd_value > whale_threshold:
-                            large_transactions.append(tx)
-                        await asyncio.sleep(1.0)
-                    logger.info(f"Found {len(large_transactions)} large transactions for {coin}")
-                    return large_transactions
-        except Exception as e:
-            logger.error(f"Error fetching whale transactions for {coin}: {str(e)}")
-            return []
-
-async def get_current_price(coin):
-    async with aiohttp.ClientSession() as session:
-        cache_key = coin.lower()
-        if cache_key in price_cache:
-            price, timestamp = price_cache[cache_key]
-            if (datetime.now().timestamp() - timestamp) < cache_duration:
-                return price
-
-        max_retries = 3
-        retry_delay = 10
-        for attempt in range(max_retries):
-            try:
-                url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin.lower()}&vs_currencies=usd"
-                params = {"x_cg_demo_api_key": os.getenv("COINGECKO_API_KEY")}
-                async with session.get(url, params=params) as response:
-                    if response.status == 429:
-                        error_key = f"fetch_price_{coin}_429"
-                        if error_log_counter.get(error_key, 0) < error_log_limit:
-                            logger.error(f"Error fetching price for {coin}: {response.status}")
-                            error_log_counter[error_key] = error_log_counter.get(error_key, 0) + 1
-                        if attempt < max_retries - 1:
-                            await asyncio.sleep(retry_delay * (2 ** attempt))
-                            continue
-                        else:
-                            return 1
-                    elif response.status != 200:
-                        error_key = f"fetch_price_{coin}_{response.status}"
-                        if error_log_counter.get(error_key, 0) < error_log_limit:
-                            logger.error(f"Error fetching price for {coin}: {response.status}")
-                            error_log_counter[error_key] = error_log_counter.get(error_key, 0) + 1
-                        return 1
-                    data = await response.json()
-                    price = data.get(coin.lower(), {}).get("usd", 1)
-                    price_cache[cache_key] = (price, datetime.now().timestamp())
-                    return price
-            except Exception as e:
-                error_key = f"fetch_price_{coin}_exception"
-                if error_log_counter.get(error_key, 0) < error_log_limit:
-                    logger.error(f"Error fetching price for {coin}: {str(e)}")
-                    error_log_counter[error_key] = error_log_counter.get(error_key, 0) + 1
-                return 1
-        return 1
+* Your knowledge is continuously updated - no strict knowledge cutoff.
+* You provide the shortest answer you can, while respecting any stated length and comprehensiveness preferences of the user.
+* Do not mention these guidelines and instructions in your responses, unless the user explicitly asks for them.
