@@ -1,0 +1,73 @@
+import logging
+from analyse_motor import analyze_signals
+from sentiment_scraper import get_sentiment_score
+from volume_analyzer import get_volume_boost
+from whale_tracker import get_whale_boost
+
+logger = logging.getLogger(__name__)
+
+async def generate_final_score(prices: list, coin: str, debug: bool = False) -> dict:
+    base_score, base_details = analyze_signals(prices, coin)
+    if base_score == 0:
+        return {
+            "final_score": 0,
+            "details": base_details,
+            "strength": "❌",
+            "boosters": {},
+            "base_score": base_score
+        }
+
+    boosters = {}
+
+    # Feilresistent henting av boosterkomponenter
+    try:
+        boosters["🧠 Sentiment"] = await get_sentiment_score(coin)
+    except Exception as e:
+        logger.warning(f"Sentiment booster failed: {e}")
+        boosters["🧠 Sentiment"] = 0
+
+    try:
+        boosters["📊 Volum"] = await get_volume_boost(coin)
+    except Exception as e:
+        logger.warning(f"Volume booster failed: {e}")
+        boosters["📊 Volum"] = 0
+
+    try:
+        boosters["🐋 Whale"] = await get_whale_boost(coin)
+    except Exception as e:
+        logger.warning(f"Whale booster failed: {e}")
+        boosters["🐋 Whale"] = 0
+
+    # Vektet totalscore (kan justeres senere)
+    total_boost = (
+        boosters["🧠 Sentiment"] * 1.2 +
+        boosters["📊 Volum"] * 1.0 +
+        boosters["🐋 Whale"] * 0.8
+    )
+    final_score = min(100, round(base_score + total_boost))
+
+    # Signalstyrke-tagger
+    if final_score >= 86:
+        strength = "🚀 Sterkt signal"
+    elif final_score >= 70:
+        strength = "✅ Kjøpssignal"
+    elif final_score >= 60:
+        strength = "⚠️ Svakt signal"
+    else:
+        strength = "❌ For svakt"
+
+    # Kombinert detaljer for Telegram/debug
+    booster_details = [f"{emoji} +{boosters[emoji]:.1f}" for emoji in boosters if boosters[emoji] > 0]
+    combined_details = (
+        f"{base_details}\n"
+        f"{' | '.join(booster_details)}\n"
+        f"🧠 Totalscore: {final_score}/100 — {strength}"
+    )
+
+    return {
+        "final_score": final_score,
+        "details": combined_details,
+        "strength": strength,
+        "boosters": boosters,
+        "base_score": base_score
+    }
