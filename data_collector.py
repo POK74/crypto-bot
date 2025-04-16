@@ -9,7 +9,12 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 load_dotenv()
 
-COINGECKO_API_BASE = "https://api.coingecko.com/api/v3"
+# Bruk riktig API-base for Pro API-nøkler
+if os.getenv("COINGECKO_API_KEY"):
+    COINGECKO_API_BASE = "https://pro-api.coingecko.com/api/v3"
+else:
+    COINGECKO_API_BASE = "https://api.coingecko.com/api/v3"
+
 API_KEY = os.getenv("COINGECKO_API_KEY")
 
 HEADERS = {
