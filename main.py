@@ -6,18 +6,20 @@ from datetime import datetime
 
 from telegram_handler import send_telegram_message
 from data_collector import fetch_top_coins, fetch_historical_data_for_training
-from analyse_motor import analyze_signals
-from whale_tracker import run_whale_tracker  # 🐋 Ny linje
+from signal_scoring import analyze_signals
+from whale_tracker import update_whale_cache
+from sentiment_scraper import update_sentiment_scores
+from volume_analyzer import update_volume_cache
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Asynkron hovedmotor for signalanalyse
+# 📈 Hovedmotor for signalanalyse
 async def run_signal_scan():
     logger.info("🚀 Starter signal-scan")
 
     await send_telegram_message(
-        f"🚀 *Ny signal-scan aktivert!*\n🕒 {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC\n🤖 MenBreakthrough AI-Bot er i gang!"
+        f"🚀 *Ny signal-scan aktivert!*\n🕒 {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC\n🤖 MenBreakthrough AI-Trader er i gang!"
     )
 
     coins = await fetch_top_coins(limit=20)
@@ -49,13 +51,18 @@ async def run_signal_scan():
         message += details
         await send_telegram_message(message)
 
-# Kjør både signal-scan og whale-tracking samtidig
-async def main():
+# 🧠 Kjør alle boost-oppdateringer parallelt
+async def update_all_boosts():
     await asyncio.gather(
-        run_signal_scan(),
-        run_whale_tracker()
+        update_whale_cache(),
+        update_sentiment_scores(),
+        update_volume_cache()
     )
+
+# 🧩 Alt samlet i én loop
+async def main():
+    await update_all_boosts()
+    await run_signal_scan()
 
 if __name__ == "__main__":
     asyncio.run(main())
-
