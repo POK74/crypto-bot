@@ -16,10 +16,13 @@ HEADERS = {
 if API_KEY:
     HEADERS["x-cg-pro-api-key"] = API_KEY
 
+
 async def fetch_top_coins(limit: int = None) -> list:
     try:
         env_limit = os.getenv("COIN_LIMIT", "20")
         limit = limit or int(env_limit)
+        if not isinstance(limit, int):
+            raise ValueError(f"COIN_LIMIT must be int, got {type(limit)}")
         url = f"{COINGECKO_API_BASE}/coins/markets"
         params = {
             "vs_currency": "usd",
@@ -40,6 +43,7 @@ async def fetch_top_coins(limit: int = None) -> list:
     except Exception as e:
         logger.warning(f"COIN_LIMIT-feil: {e}")
         return []
+
 
 async def fetch_historical_data_for_training(coin_id: str, days: int = 2) -> list:
     url = f"{COINGECKO_API_BASE}/coins/{coin_id}/market_chart"
