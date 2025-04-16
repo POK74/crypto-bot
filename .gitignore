@@ -1,30 +1,46 @@
-# Byte-compiled / optimized / DLL files
+# 🐍 Python- og bytekodefiler
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Caches
-*.log
-*.tmp
-*.cache
-
-# Environments
+# 🔒 Miljøvariabler og hemmelige nøkler
 .env
 .env.*
+*.secret
+*.token
 
-# VS Code settings
+# 📦 Pakkefiler og distribusjon
+dist/
+build/
+*.egg-info/
+*.tar.gz
+
+# 📊 Analyse-, cache- og testdata
+*.csv
+*.xlsx
+*.json
+*.log
+*.tmp
+logs/
+reports/
+charts/
+volume_cache.json
+sentiment_cache.json
+whale_cache.json
+signal_boost_cache.json
+mock_prices.json
+test_run_output.log
+
+# 🔧 Editor/IDE og prosjektinnstillinger
 .vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
 
-# OS files
+# 💻 OS- og metadatafiler
 .DS_Store
 Thumbs.db
 
-# Notebooks and data
+# 📓 Notebook-filer og checkpoints (valgfritt)
+*.ipynb
 *.ipynb_checkpoints
-*.csv
-
-# Render logs
-logs/
-trendboost_chart.png
-signals_today.log
-winrate_history.csv
