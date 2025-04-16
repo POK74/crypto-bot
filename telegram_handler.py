@@ -1,31 +1,34 @@
-import aiohttp
-import asyncio
 import os
 import logging
+import aiohttp
 
-logger = logging.getLogger(__name__)
-
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+# Hent Telegram API-data fra miljøvariabler
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-async def send_telegram_message(message: str):
-    if not BOT_TOKEN or not CHAT_ID:
-        logger.error("Missing Telegram credentials.")
-        return
+# Sjekk at begge finnes, ellers stopp
+if not TOKEN or not CHAT_ID:
+    error_msg = "Environment variables TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set"
+    logging.error(error_msg)
+    raise RuntimeError(error_msg)
 
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
+# Telegram API URL
+API_URL = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+
+# Asynkron sendefunksjon
+async def send_message(text: str):
+    data = {
         "chat_id": CHAT_ID,
-        "text": message,
+        "text": text,
         "parse_mode": "Markdown"
     }
-
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, data=payload) as response:
-                if response.status == 200:
-                    logger.info("Telegram message sent successfully")
+            async with session.post(API_URL, data=data) as resp:
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    logging.error(f"Failed to send Telegram message. Status code: {resp.status}, response: {error_text}")
                 else:
-                    logger.warning(f"Failed to send message: {response.status} - {await response.text()}")
+                    logging.info(f"Telegram message sent successfully: {text}")
     except Exception as e:
-        logger.exception(f"Exception during Telegram send: {e}")
+        logging.error(f"Error sending message to Telegram: {e}")
