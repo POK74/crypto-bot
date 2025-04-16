@@ -1,43 +1,28 @@
-import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import RandomForestClassifier
-import logging
+import pandas as pd
 
-logger = logging.getLogger(__name__)
+def analyze_market_conditions(df):
+    if df is None or df.empty:
+        return {"confidence": None}
 
-class Analyzer:
-    def __init__(self):
-        self.scaler = StandardScaler()
-        self.model = RandomForestClassifier(n_estimators=100, random_state=42)
+    df["ma"] = df["close"].rolling(window=20).mean()
+    df["std"] = df["close"].rolling(window=20).std()
+    df["upper_band"] = df["ma"] + 2 * df["std"]
+    df["lower_band"] = df["ma"] - 2 * df["std"]
 
-    def fit(self, data):
-        try:
-            # Velg kun numeriske kolonner for skalering og trening
-            X = data[['close', 'volume']].copy()  # Ekskluder 'timestamp' og andre ikke-numeriske kolonner
-            y = data['label']
+    last_price = df["close"].iloc[-1]
+    last_ma = df["ma"].iloc[-1]
 
-            # Skaler funksjonene
-            X_scaled = self.scaler.fit_transform(X)
-            
-            # Tren modellen
-            self.model.fit(X_scaled, y)
-            logger.info("Analyzer successfully fitted")
-        except Exception as e:
-            logger.error(f"Error fitting analyzer: {str(e)}")
-            raise
+    confidence = 0
+    if last_price > last_ma:
+        confidence += 2
+    if last_price > df["upper_band"].iloc[-1]:
+        confidence += 2
+    if df["volume"].iloc[-1] > df["volume"].mean():
+        confidence += 1
 
-    def predict(self, features):
-        try:
-            # Velg kun numeriske kolonner for prediksjon
-            X = features[['close', 'volume']].copy()
-            
-            # Skaler funksjonene
-            X_scaled = self.scaler.transform(X)
-            
-            # Gjør prediksjon
-            prediction = self.model.predict(X_scaled)
-            return prediction
-        except Exception as e:
-            logger.error(f"Error predicting with analyzer: {str(e)}")
-            return [0]  # Fallback-prediksjon
+    return {
+        "confidence": confidence,
+        "bias": "Bullish" if last_price > last_ma else "Bearish",
+        "volume": df["volume"].iloc[-1]
+    }

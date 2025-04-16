@@ -1,6 +1,6 @@
 aiohttp
-pandas
-numpy
-scikit-learn
-xgboost
 ccxt
+pandas
+matplotlib
+numpy
+python-dotenv
