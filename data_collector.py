@@ -81,6 +81,7 @@ async def fetch_historical_data_for_training(coin, days=90):
             "enableRateLimit": True,
         })
         symbol = f"{coin}/USDT"
+        logger.info(f"Requesting OHLCV for {symbol} with timeframe=1h, days={days}")
         since = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
         ohlcv = await exchange.fetch_ohlcv(symbol, timeframe="1h", since=since, limit=days * 24)
         await exchange.close()
@@ -125,7 +126,7 @@ async def fetch_whale_transactions(coin):
         "XRP": "rLHzPsX6oXkzU2qL12kHCH8G8cnZvUxrG",
     }
     endpoints = {
-        "BTC": f"https://api.tatum.io/v3/bitcoin/transaction/address/{whale_addresses['BTC']}?pageSize=50",
+        "BTC": f"https://api.blockchain.com/v3/public/btc/transactions?address={whale_addresses['BTC']}&api_key={os.getenv('BLOCKCHAIN_API_KEY')}",
         "ETH": f"https://api.etherscan.io/api?module=account&action=txlist&address={whale_addresses['ETH']}&startblock=0&endblock=99999999&sort=desc&apikey={os.getenv('ETHERSCAN_API_KEY')}",
         "BNB": f"https://api.bscscan.com/api?module=account&action=txlist&address={whale_addresses['BNB']}&startblock=0&endblock=99999999&sort=desc&apikey={os.getenv('BSCSCAN_API_KEY')}",
         "SOL": f"https://public-api.solscan.io/account/transactions?account={whale_addresses['SOL']}",
@@ -133,7 +134,6 @@ async def fetch_whale_transactions(coin):
         "XRP": f"https://api.xrpldata.com/v1/addresses/{whale_addresses['XRP']}/transactions",
     }
     headers = {
-        "BTC": {"x-api-key": os.getenv("BLOCKCHAIN_API_KEY")},
         "ADA": {"project_id": os.getenv("BLOCKFROST_API_KEY")},
     }
 
@@ -153,16 +153,16 @@ async def fetch_whale_transactions(coin):
                 data = await response.json()
                 price = await get_current_price(coin)
                 if coin == "BTC":
-                    transactions = data if isinstance(data, list) else []
+                    transactions = data.get("txs", [])  # Blockchain.com API returnerer transaksjoner under 'txs'
                     if not transactions:
                         logger.error(f"Error fetching whale transactions for {coin}: No transactions found")
                         return []
                     large_transactions = []
                     for tx in transactions:
                         total_value = 0
-                        outputs = tx.get("outputs", [])
+                        outputs = tx.get("out", [])  # Blockchain.com bruker 'out' for outputs
                         for output in outputs:
-                            value = int(output.get("value", 0))
+                            value = int(output.get("value", 0))  # Verdi i satoshis
                             total_value += value
                         value_btc = total_value / 1e8
                         usd_value = value_btc * price
