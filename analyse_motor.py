@@ -1,73 +1,70 @@
-import asyncio
-import logging
-from datetime import datetime
 import numpy as np
-
-from data_collector import fetch_prices
-from telegram_handler import send_telegram_message
+import logging
 
 logger = logging.getLogger(__name__)
 
-def analyze_signals(prices, coin):
+def analyze_signals(prices: list, coin: str):
     if not prices or len(prices) < 48:
         logger.warning(f"Not enough data to analyze {coin}")
         return 0, "❌ Not enough data"
 
-    timestamps, values = zip(*prices[-48:])
-    prices_array = np.array(values)
+    if not all(isinstance(p, dict) and "price" in p for p in prices):
+        logger.error(f"Malformed price data for {coin}!")
+        return 0, "❌ Invalid price format"
 
-    change_24h = (prices_array[-1] - prices_array[0]) / prices_array[0] * 100
-    change_6h = (prices_array[-1] - prices_array[-7]) / prices_array[-7] * 100
-    change_1h = (prices_array[-1] - prices_array[-2]) / prices_array[-2] * 100
+    try:
+        prices_array = np.array([p["price"] for p in prices[-48:]])
 
-    score = 0
-    if change_24h > 3: score += 30
-    if change_6h > 1: score += 25
-    if change_1h > 0.5: score += 25
+        # Prisendringer
+        change_24h = (prices_array[-1] - prices_array[0]) / prices_array[0] * 100
+        change_6h = (prices_array[-1] - prices_array[-7]) / prices_array[-7] * 100
+        change_1h = (prices_array[-1] - prices_array[-2]) / prices_array[-2] * 100
 
-    volatility = np.std(prices_array[-12:])
-    if volatility < 0.01:
-        score -= 20
-        vol_text = "🔸 Low volatility"
-    else:
-        score += 10
-        vol_text = "📈 Normal volatility"
+        # Score-beregning
+        score = 0
+        if change_24h > 3:
+            score += 30
+        if change_6h > 1:
+            score += 25
+        if change_1h > 0.5:
+            score += 25
 
-    details = f"24h: {change_24h:.2f}%, 6h: {change_6h:.2f}%, 1h: {change_1h:.2f}%\n{vol_text}"
+        # Volatilitet
+        volatility = np.std(prices_array[-12:])
+        if volatility < 0.01:
+            score -= 20
+            vol_text = "🔸 Low volatility"
+        else:
+            score += 10
+            vol_text = "📈 Normal volatility"
 
-    return score, details
+        # Trendmomentum
+        momentum = prices_array[-1] - np.mean(prices_array[-12:])
+        if momentum > 0:
+            score += 5
+            trend_text = "📈 Oppadgående momentum"
+        else:
+            trend_text = "➖ Ingen momentumbonus"
 
-async def run_signal_scan():
-    coins = ["bitcoin", "ethereum", "solana", "avalanche-2"]
-    signals_found = 0
+        # Glidende snitt trend
+        ma_24 = np.mean(prices_array[-24:])
+        ma_48 = np.mean(prices_array)
+        if ma_24 > ma_48:
+            score += 5
+            sma_text = "🟢 Kort trend over lang trend"
+        else:
+            sma_text = "🔸 Kort trend under lang trend"
 
-    for coin in coins:
-        try:
-            prices = await fetch_prices(coin, hours=48)
-            score, details = analyze_signals(prices, coin)
+        # Sammensatt Telegram-detaljtekst
+        details = (
+            f"24h: {change_24h:.2f}%, 6h: {change_6h:.2f}%, 1h: {change_1h:.2f}%\n"
+            f"{vol_text} | {trend_text} | {sma_text}\n"
+            f"📊 Basisscore: {score}/100 (uten boosters)"
+        )
 
-            if score >= 60:
-                signals_found += 1
-                message = (
-                    f"🚀 **Buy Signal!**\n\n"
-                    f"📌 **Coin:** {coin.capitalize()}\n"
-                    f"📅 **Time:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}\n"
-                    f"💯 **Score:** {score}/100\n"
-                    f"---\n"
-                    f"{details}"
-                )
-                await send_telegram_message(message)
-                logger.info(f"Signal sent for {coin}: Score {score}")
-            else:
-                logger.info(f"No strong signal for {coin}: Score {score}")
+        logger.info(f"{coin.upper()} → Score: {score}, Volatility: {volatility:.5f}, Momentum: {momentum:.4f}")
+        return score, details
 
-        except Exception as e:
-            logger.error(f"Error analyzing {coin}: {e}")
-
-    if signals_found == 0:
-        logger.info("No signals found this round.")
-    else:
-        logger.info(f"Total signals sent: {signals_found}")
-
-if __name__ == "__main__":
-    asyncio.run(run_signal_scan())
+    except Exception as e:
+        logger.exception(f"Error analyzing {coin}: {e}")
+        return 0, "❌ Error in analysis"
