@@ -1,87 +1,79 @@
-import logging
 import aiohttp
-from math import log
-import asyncio
+import logging
+import math
+import json
+import pathlib
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
+LEARN_CACHE_PATH = pathlib.Path("logs/volume_cache.json")
+LEARN_CACHE_PATH.parent.mkdir(exist_ok=True)
 
-COINGECKO_BASE = "https://api.coingecko.com/api/v3"
-
-HYPE_COINS = {"pepe", "shiba-inu", "dogecoin"}
-SAFE_COINS = {"bitcoin", "ethereum", "binancecoin"}
-
+# 🌊 Versjon 2.2 – med læringslogg og trendcache
 async def get_volume_boost(coin_id: str) -> float:
     try:
+        url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
         async with aiohttp.ClientSession() as session:
-            # --- 1. Hent nåværende markedsdata og 2 dagers volumdata parallelt ---
-            url = f"{COINGECKO_BASE}/coins/{coin_id}"
-            chart_url = f"{COINGECKO_BASE}/coins/{coin_id}/market_chart?vs_currency=usd&days=2"
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    logger.warning(f"Volume data fetch failed for {coin_id}: {resp.status}")
+                    return 0.0
 
-            resp_live, resp_chart = await asyncio.gather(
-                session.get(url),
-                session.get(chart_url)
-            )
+                data = await resp.json()
+                market_data = data.get("market_data", {})
+                volume = market_data.get("total_volume", {}).get("usd", 0)
+                market_cap = market_data.get("market_cap", {}).get("usd", 1)
 
-            if resp_live.status != 200 or resp_chart.status != 200:
-                logger.warning(f"Failed to fetch volume/market data for {coin_id}")
-                return 0.0
+                if volume == 0 or market_cap == 0:
+                    return 0.0
 
-            data = await resp_live.json()
-            chart = await resp_chart.json()
+                ratio = volume / market_cap
+                boost = 0.0
 
-            market_data = data.get("market_data", {})
-            volume_now = market_data.get("total_volume", {}).get("usd", 0.0)
-            market_cap = market_data.get("market_cap", {}).get("usd", 1.0)
-            ratio = volume_now / market_cap if market_cap else 0
+                if ratio > 0.8:
+                    boost = 6.0
+                elif ratio > 0.4:
+                    boost = 4.0
+                elif ratio > 0.2:
+                    boost = 2.0
+                elif ratio > 0.1:
+                    boost = 1.0
 
-            # --- 2. Hent og grupper 4-timers volumtrender ---
-            volumes = chart.get("total_volumes", [])
-            if len(volumes) < 48:
-                return 0.0
+                # Meme coins awareness
+                meme_coins = ["dogecoin", "shiba", "pepe"]
+                if coin_id in meme_coins and ratio > 0.3:
+                    boost *= 1.2
 
-            blocks = [vol[1] for vol in volumes]
-            chunks = [blocks[i:i+8] for i in range(0, len(blocks), 8)]  # 6 blokker à 4 timer
-            trend_up = all(sum(chunks[i]) <= sum(chunks[i+1]) for i in range(len(chunks)-1))
+                # Læringsbasert boostforsterker (cache og logg)
+                historical_boost = 0
+                cache_data = {}
+                if LEARN_CACHE_PATH.exists():
+                    with open(LEARN_CACHE_PATH, "r") as f:
+                        try:
+                            cache_data = json.load(f)
+                            if coin_id in cache_data:
+                                history = cache_data[coin_id][-3:]
+                                changes = [entry["volume"] for entry in history]
+                                if len(changes) >= 2 and changes[-1] > changes[0] * 1.5:
+                                    historical_boost += 2.0
+                        except json.JSONDecodeError:
+                            cache_data = {}
 
-            vol_yesterday = blocks[0]
-            vol_today = blocks[-1]
-            vol_growth = (vol_today - vol_yesterday) / vol_yesterday * 100 if vol_yesterday else 0
+                # Lagre nåværende volum for fremtidig læring
+                timestamp = datetime.utcnow().isoformat()
+                entry = {"timestamp": timestamp, "volume": volume}
+                if coin_id not in cache_data:
+                    cache_data[coin_id] = []
+                cache_data[coin_id].append(entry)
+                cache_data[coin_id] = cache_data[coin_id][-10:]
 
-            # --- 3. Poengberegning ---
-            boost = 0.0
+                with open(LEARN_CACHE_PATH, "w") as f:
+                    json.dump(cache_data, f, indent=2)
 
-            # Volumvekst
-            if vol_growth > 100:
-                boost += 3.0
-            elif vol_growth > 50:
-                boost += 2.0
-            elif vol_growth > 20:
-                boost += 1.0
-
-            # Volum/MarketCap ratio
-            if ratio > 0.5:
-                boost += 3.0
-            elif ratio > 0.2:
-                boost += 2.0
-            elif ratio > 0.05:
-                boost += 1.0
-
-            # Logaritmisk ekstra boost for små coins
-            if volume_now < 200_000_000:
-                boost += log(vol_growth + 1) * 0.5
-
-            # Jevn trend gir ekstra tillit
-            if trend_up:
-                boost += 1.0
-
-            # Coin-type justering
-            if coin_id in SAFE_COINS:
-                boost *= 0.8
-            elif coin_id in HYPE_COINS:
-                boost *= 1.2
-
-            return round(min(boost, 10.0), 2)
+                final_boost = round(min(boost + math.log(boost + 1) + historical_boost, 10.0), 2)
+                logger.info(f"Volume boost for {coin_id}: {final_boost} (ratio {ratio:.2f})")
+                return final_boost
 
     except Exception as e:
-        logger.warning(f"Volume fetch error for {coin_id}: {e}")
+        logger.warning(f"Volume analysis error for {coin_id}: {e}")
         return 0.0
