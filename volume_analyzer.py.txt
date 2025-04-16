@@ -1,0 +1,87 @@
+import logging
+import aiohttp
+from math import log
+import asyncio
+
+logger = logging.getLogger(__name__)
+
+COINGECKO_BASE = "https://api.coingecko.com/api/v3"
+
+HYPE_COINS = {"pepe", "shiba-inu", "dogecoin"}
+SAFE_COINS = {"bitcoin", "ethereum", "binancecoin"}
+
+async def get_volume_boost(coin_id: str) -> float:
+    try:
+        async with aiohttp.ClientSession() as session:
+            # --- 1. Hent nåværende markedsdata og 2 dagers volumdata parallelt ---
+            url = f"{COINGECKO_BASE}/coins/{coin_id}"
+            chart_url = f"{COINGECKO_BASE}/coins/{coin_id}/market_chart?vs_currency=usd&days=2"
+
+            resp_live, resp_chart = await asyncio.gather(
+                session.get(url),
+                session.get(chart_url)
+            )
+
+            if resp_live.status != 200 or resp_chart.status != 200:
+                logger.warning(f"Failed to fetch volume/market data for {coin_id}")
+                return 0.0
+
+            data = await resp_live.json()
+            chart = await resp_chart.json()
+
+            market_data = data.get("market_data", {})
+            volume_now = market_data.get("total_volume", {}).get("usd", 0.0)
+            market_cap = market_data.get("market_cap", {}).get("usd", 1.0)
+            ratio = volume_now / market_cap if market_cap else 0
+
+            # --- 2. Hent og grupper 4-timers volumtrender ---
+            volumes = chart.get("total_volumes", [])
+            if len(volumes) < 48:
+                return 0.0
+
+            blocks = [vol[1] for vol in volumes]
+            chunks = [blocks[i:i+8] for i in range(0, len(blocks), 8)]  # 6 blokker à 4 timer
+            trend_up = all(sum(chunks[i]) <= sum(chunks[i+1]) for i in range(len(chunks)-1))
+
+            vol_yesterday = blocks[0]
+            vol_today = blocks[-1]
+            vol_growth = (vol_today - vol_yesterday) / vol_yesterday * 100 if vol_yesterday else 0
+
+            # --- 3. Poengberegning ---
+            boost = 0.0
+
+            # Volumvekst
+            if vol_growth > 100:
+                boost += 3.0
+            elif vol_growth > 50:
+                boost += 2.0
+            elif vol_growth > 20:
+                boost += 1.0
+
+            # Volum/MarketCap ratio
+            if ratio > 0.5:
+                boost += 3.0
+            elif ratio > 0.2:
+                boost += 2.0
+            elif ratio > 0.05:
+                boost += 1.0
+
+            # Logaritmisk ekstra boost for små coins
+            if volume_now < 200_000_000:
+                boost += log(vol_growth + 1) * 0.5
+
+            # Jevn trend gir ekstra tillit
+            if trend_up:
+                boost += 1.0
+
+            # Coin-type justering
+            if coin_id in SAFE_COINS:
+                boost *= 0.8
+            elif coin_id in HYPE_COINS:
+                boost *= 1.2
+
+            return round(min(boost, 10.0), 2)
+
+    except Exception as e:
+        logger.warning(f"Volume fetch error for {coin_id}: {e}")
+        return 0.0
