@@ -126,7 +126,7 @@ async def fetch_whale_transactions(coin):
         "XRP": "rLHzPsX6oXkzU2qL12kHCH8G8cnZvUxrG",
     }
     endpoints = {
-        "BTC": f"https://api.blockchain.com/v3/public/btc/transactions?address={whale_addresses['BTC']}&api_key={os.getenv('BLOCKCHAIN_API_KEY')}",
+        "BTC": f"https://api.blockchain.com/v3/exchange/btc/address/{whale_addresses['BTC']}?api_key={os.getenv('BLOCKCHAIN_API_KEY')}",
         "ETH": f"https://api.etherscan.io/api?module=account&action=txlist&address={whale_addresses['ETH']}&startblock=0&endblock=99999999&sort=desc&apikey={os.getenv('ETHERSCAN_API_KEY')}",
         "BNB": f"https://api.bscscan.com/api?module=account&action=txlist&address={whale_addresses['BNB']}&startblock=0&endblock=99999999&sort=desc&apikey={os.getenv('BSCSCAN_API_KEY')}",
         "SOL": f"https://public-api.solscan.io/account/transactions?account={whale_addresses['SOL']}",
