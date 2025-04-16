@@ -1,6 +1,7 @@
-from sklearn.preprocessing import StandardScaler
-import xgboost as xgb
+import pandas as pd
 import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
 import logging
 
 logger = logging.getLogger(__name__)
@@ -8,55 +9,35 @@ logger = logging.getLogger(__name__)
 class Analyzer:
     def __init__(self):
         self.scaler = StandardScaler()
-        self.model = xgb.XGBClassifier(
-            n_estimators=100,
-            max_depth=3,
-            learning_rate=0.1,
-            random_state=42
-        )
-        self.is_fitted = False
+        self.model = RandomForestClassifier(n_estimators=100, random_state=42)
 
-    def fit(self, X, y=None):
+    def fit(self, data):
         try:
-            # Tren scaler med data
-            self.scaler.fit(X)
-            # Tren modellen hvis etiketter er gitt
-            if y is not None:
-                scaled_X = self.scaler.transform(X)
-                self.model.fit(scaled_X, y)
-            else:
-                logger.warning("No labels provided, using default model")
-            self.is_fitted = True
+            # Velg kun numeriske kolonner for skalering og trening
+            X = data[['close', 'volume']].copy()  # Ekskluder 'timestamp' og andre ikke-numeriske kolonner
+            y = data['label']
+
+            # Skaler funksjonene
+            X_scaled = self.scaler.fit_transform(X)
+            
+            # Tren modellen
+            self.model.fit(X_scaled, y)
             logger.info("Analyzer successfully fitted")
         except Exception as e:
             logger.error(f"Error fitting analyzer: {str(e)}")
             raise
 
-    def analyze_data(self, data, current_price, coin):
+    def predict(self, features):
         try:
-            if not self.is_fitted:
-                raise ValueError("Analyzer is not fitted. Call 'fit' with training data first.")
-            # Konverter data til numpy array
-            X = np.array(data)
-            # Skaler data
-            scaled_data = self.scaler.transform(X)
-            # Forutsig med modellen
-            prediction = self.model.predict(scaled_data)
-            # Generer detaljert melding basert på prediksjon
-            if prediction[0] == 1:  # Kjøpssignal
-                target_price = current_price * 1.05  # Målsum: 5 % økning
-                stop_loss = current_price * 0.98    # Stop-loss: 2 % under
-                message = (
-                    f"🚀 ML Signal: {coin}/USDT\n"
-                    f"Prediction: Buy\n"
-                    f"Current Price: ${current_price:.2f}\n"
-                    f"Target Price: ${target_price:.2f} (+5%)\n"
-                    f"Stop-Loss: ${stop_loss:.2f} (-2%)\n"
-                    f"Horizon: Within 1 hour"
-                )
-                return message
-            else:
-                return None  # Ingen melding hvis prediksjonen er "selg" eller "hold"
+            # Velg kun numeriske kolonner for prediksjon
+            X = features[['close', 'volume']].copy()
+            
+            # Skaler funksjonene
+            X_scaled = self.scaler.transform(X)
+            
+            # Gjør prediksjon
+            prediction = self.model.predict(X_scaled)
+            return prediction
         except Exception as e:
-            logger.error(f"Error in analyze_data: {str(e)}")
-            raise
+            logger.error(f"Error predicting with analyzer: {str(e)}")
+            return [0]  # Fallback-prediksjon
