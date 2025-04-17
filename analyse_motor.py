@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 import numpy as np
 from data_collector import fetch_historical_data_for_training, fetch_realtime_price
+from notifier import send_telegram_alert  # Ny integrasjon
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -57,20 +58,28 @@ async def analyze_signals(symbol: str) -> dict:
             logger.warning(f"Kunne ikke skrive cache for {symbol}: {e}")
 
         logger.info(f"🟡 {symbol.upper()} fallback-score basert på sanntidspris: {score}")
-        return {
+    
+        result = {
             "symbol": symbol,
             "score": score,
             "note": "fallback",
             "price": price_now,
             "change": round(change_pct, 2) if last_price else 0
         }
+    else:
+        score = calculate_score(data)
+        logger.info(f"🟢 {symbol.upper()} full analyse-score: {score}")
 
-    score = calculate_score(data)
-    logger.info(f"🟢 {symbol.upper()} full analyse-score: {score}")
-    return {
-        "symbol": symbol,
-        "score": score,
-        "note": "historical",
-        "price": data[-1][1] if data else 0.0,
-        "change": 0.0
-    }
+        result = {
+            "symbol": symbol,
+            "score": score,
+            "note": "historical",
+            "price": data[-1][1] if data else 0.0,
+            "change": 0.0
+        }
+
+    # Send Telegram-varsel hvis score er høy
+    if result["score"] >= 75:
+        await send_telegram_alert(result)
+
+    return result
