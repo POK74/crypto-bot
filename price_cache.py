@@ -28,32 +28,40 @@ async def run_realtime_scan():
     logger.info(f"Hentet topp {len(coins)} coins: {coins}")
 
     valid_signals = []
+    failed_symbols = []
 
     for coin in coins:
-        price_info = await fetch_realtime_price(coin)
-        if not price_info:
-            logger.warning(f"Mangler sanntidsdata for {coin}, hopper over.")
-            continue
+        try:
+            price_info = await fetch_realtime_price(coin)
+            await asyncio.sleep(1.1)  # Unngå 429-rate limit
+            if not price_info:
+                logger.warning(f"Mangler sanntidsdata for {coin}, hopper over.")
+                failed_symbols.append(coin)
+                continue
 
-        score, details = analyze_signals_realtime(price_info, coin)
+            score, details = analyze_signals_realtime(price_info, coin)
+            logger.info(f"{coin.upper()} - score: {score} – detaljer: {details}")
 
-        logger.info(f"{coin.upper()} - score: {score} – detaljer: {details}")
+            if score >= 70:
+                valid_signals.append((coin, score, details))
 
-        if score >= 70:
-            valid_signals.append((coin, score, details))
+        except Exception as e:
+            logger.warning(f"⚠️ Feil ved behandling av {coin}: {e}")
+            failed_symbols.append(coin)
 
     if not valid_signals:
         logger.info("Ingen sterke bevegelser funnet.")
         await send_telegram_message("📭 *Ingen prisbaserte signaler funnet akkurat nå.*")
-        return
+    else:
+        valid_signals.sort(key=lambda x: x[1], reverse=True)
+        for coin, score, details in valid_signals[:10]:
+            message = f"📈 *PRISVARSEL* - {coin.upper()}/USDT\n"
+            message += f"🔥 Endring-score: *{score}*\n"
+            message += details
+            await send_telegram_message(message)
 
-    valid_signals.sort(key=lambda x: x[1], reverse=True)
-
-    for coin, score, details in valid_signals[:10]:
-        message = f"📈 *PRISVARSEL* - {coin.upper()}/USDT\n"
-        message += f"🔥 Endring-score: *{score}*\n"
-        message += details
-        await send_telegram_message(message)
+    if failed_symbols:
+        logger.info(f"Følgende symbols ble ignorert eller feilet: {failed_symbols}")
 
 # Start kun sanntids-scan
 async def main():
