@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 load_dotenv()
 
-CMC_API_KEY = os.getenv("COINMARKETCAL_API_KEY")
+CMC_API_KEY = os.getenv("COINMARKETCAP_API_KEY")
 CMC_API_BASE = "https://pro-api.coinmarketcap.com/v1"
 
 HEADERS = {
