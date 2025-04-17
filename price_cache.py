@@ -1,45 +1,35 @@
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 
-CACHE_FILE = "price_cache.json"
+PRICE_CACHE_FILE = Path("cache/price_cache.json")
+PRICE_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-# Laster eksisterende cache eller lager en ny
-
-def load_cache():
-    if os.path.exists(CACHE_FILE):
-        with open(CACHE_FILE, "r") as f:
+def load_price_cache() -> dict:
+    if not PRICE_CACHE_FILE.exists():
+        return {}
+    try:
+        with open(PRICE_CACHE_FILE, "r") as f:
             return json.load(f)
-    return {}
+    except Exception:
+        return {}
 
-# Lagre hele cache-strukturen
+def save_price_cache(cache: dict) -> None:
+    try:
+        with open(PRICE_CACHE_FILE, "w") as f:
+            json.dump(cache, f, indent=2)
+    except Exception as e:
+        print(f"Feil ved lagring av pris-cache: {e}")
 
-def save_cache(cache):
-    with open(CACHE_FILE, "w") as f:
-        json.dump(cache, f, indent=2)
+def update_price_in_cache(cache: dict, symbol: str, price: float) -> dict:
+    timestamp = datetime.utcnow().isoformat()
+    if symbol not in cache:
+        cache[symbol] = []
+    cache[symbol].append({"timestamp": timestamp, "price": price})
 
-# Oppdater en coin med ny prisverdi og timestamp
+    # Behold bare de siste 100 datapunktene per coin
+    if len(cache[symbol]) > 100:
+        cache[symbol] = cache[symbol][-100:]
 
-def update_price_cache(coin: str, price: float):
-    cache = load_cache()
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    
-    if coin not in cache:
-        cache[coin] = []
-
-    # Unngå å legge inn identisk pris/tid rett etter hverandre
-    if cache[coin] and cache[coin][-1]["price"] == price:
-        return
-
-    cache[coin].append({"price": price, "timestamp": timestamp})
-
-    # Begrens til de siste 500 datapunktene for hver coin
-    cache[coin] = cache[coin][-500:]
-    
-    save_cache(cache)
-
-# Hent historikk for en coin
-
-def get_price_history(coin: str):
-    cache = load_cache()
-    return cache.get(coin, [])
+    return cache
