@@ -12,6 +12,7 @@ logger.setLevel(logging.INFO)
 CACHE_PATH = Path("cache")
 CACHE_PATH.mkdir(exist_ok=True)
 
+HISTORY_FILE = Path("signals_history.json")
 
 def calculate_score(data: list) -> int:
     try:
@@ -27,6 +28,25 @@ def calculate_score(data: list) -> int:
     except Exception as e:
         logger.warning(f"Feil i calculate_score: {e}")
         return 50
+
+
+def log_signal_to_history(result: dict):
+    history = []
+    if HISTORY_FILE.exists():
+        try:
+            with HISTORY_FILE.open("r") as f:
+                history = json.load(f)
+        except Exception as e:
+            logger.warning(f"Kunne ikke lese signalhistorikk: {e}")
+
+    result["timestamp"] = datetime.utcnow().isoformat()
+    history.append(result)
+
+    try:
+        with HISTORY_FILE.open("w") as f:
+            json.dump(history[-500:], f, indent=2)
+    except Exception as e:
+        logger.warning(f"Kunne ikke skrive signalhistorikk: {e}")
 
 
 async def analyze_signals(symbol: str) -> dict:
@@ -58,7 +78,7 @@ async def analyze_signals(symbol: str) -> dict:
             logger.warning(f"Kunne ikke skrive cache for {symbol}: {e}")
 
         logger.info(f"🟡 {symbol.upper()} fallback-score basert på sanntidspris: {score}")
-    
+
         result = {
             "symbol": symbol,
             "score": score,
@@ -77,6 +97,8 @@ async def analyze_signals(symbol: str) -> dict:
             "price": data[-1][1] if data else 0.0,
             "change": 0.0
         }
+
+    log_signal_to_history(result)
 
     # Send Telegram-varsel hvis score er høy
     if result["score"] >= 75:

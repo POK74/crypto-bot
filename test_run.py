@@ -1,37 +1,107 @@
-import asyncio
+import json
 import logging
-import sys
 from datetime import datetime
-from analyse_motor import analyze_signals
-from data_collector import fetch_top_coins, fetch_historical_data_for_training
+from pathlib import Path
+import numpy as np
+from data_collector import fetch_historical_data_for_training, fetch_realtime_price
+from notifier import send_telegram_alert  # Ny integrasjon
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
-async def run_test(selected_coins=None):
-    logger.info("🔍 Kjører test av signalmotoren...")
-    start = datetime.utcnow()
+CACHE_PATH = Path("cache")
+CACHE_PATH.mkdir(exist_ok=True)
 
-    coins = selected_coins or await fetch_top_coins(limit=5)
-    logger.info(f"Tester følgende coins: {coins}")
+HISTORY_FILE = Path("signals_history.json")
 
-    results = []
+def calculate_score(data: list) -> int:
+    try:
+        prices = [price for _, price in data if price > 0]
+        if len(prices) < 2:
+            return 50
 
-    for coin in coins:
-        prices = await fetch_historical_data_for_training(coin)
-        score, details = analyze_signals(prices, coin)
+        returns = np.diff(prices) / prices[:-1] * 100
+        avg_return = np.mean(returns)
 
-        result = f"\n🧪 {coin.upper()}\n✅ Score: {score}/100\n{details}"
-        print(result)
-        results.append(result)
+        score = int(min(max(avg_return, -50), 50) + 50)
+        return score
+    except Exception as e:
+        logger.warning(f"Feil i calculate_score: {e}")
+        return 50
 
-    end = datetime.utcnow()
-    total_time = (end - start).total_seconds()
-    print(f"\n🕒 Ferdig. Kjoringstid: {total_time:.2f} sekunder.")
 
-    with open("test_run_output.log", "w", encoding="utf-8") as f:
-        f.write("\n".join(results))
+def log_signal_to_history(result: dict):
+    history = []
+    if HISTORY_FILE.exists():
+        try:
+            with HISTORY_FILE.open("r") as f:
+                history = json.load(f)
+        except Exception as e:
+            logger.warning(f"Kunne ikke lese signalhistorikk: {e}")
 
-if __name__ == "__main__":
-    coins = sys.argv[1:] if len(sys.argv) > 1 else None
-    asyncio.run(run_test(coins))
+    result["timestamp"] = datetime.utcnow().isoformat()
+    history.append(result)
+
+    try:
+        with HISTORY_FILE.open("w") as f:
+            json.dump(history[-500:], f, indent=2)
+    except Exception as e:
+        logger.warning(f"Kunne ikke skrive signalhistorikk: {e}")
+
+
+async def analyze_signals(symbol: str) -> dict:
+    data = await fetch_historical_data_for_training(symbol)
+
+    if not data or len(data) < 2:
+        price_now = await fetch_realtime_price(symbol)
+        cache_file = CACHE_PATH / f"{symbol}_last_price.json"
+
+        last_price = 0.0
+        if cache_file.exists():
+            try:
+                with cache_file.open("r") as f:
+                    cached = json.load(f)
+                    last_price = cached.get("price", 0.0)
+            except Exception as e:
+                logger.warning(f"Kunne ikke lese cache for {symbol}: {e}")
+
+        if last_price:
+            change_pct = (price_now - last_price) / last_price * 100
+            score = int(min(max(change_pct, -50), 50) + 50)
+        else:
+            score = 50
+
+        try:
+            with cache_file.open("w") as f:
+                json.dump({"price": price_now, "timestamp": datetime.utcnow().isoformat()}, f)
+        except Exception as e:
+            logger.warning(f"Kunne ikke skrive cache for {symbol}: {e}")
+
+        logger.info(f"🟡 {symbol.upper()} fallback-score basert på sanntidspris: {score}")
+
+        result = {
+            "symbol": symbol,
+            "score": score,
+            "note": "fallback",
+            "price": price_now,
+            "change": round(change_pct, 2) if last_price else 0
+        }
+    else:
+        score = calculate_score(data)
+        logger.info(f"🟢 {symbol.upper()} full analyse-score: {score}")
+
+        result = {
+            "symbol": symbol,
+            "score": score,
+            "note": "historical",
+            "price": data[-1][1] if data else 0.0,
+            "change": 0.0
+        }
+
+    log_signal_to_history(result)
+
+    # Send Telegram-varsel hvis score er høy
+    if result["score"] >= 75:
+        await send_telegram_alert(result)
+
+    return result
