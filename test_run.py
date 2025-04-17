@@ -29,7 +29,6 @@ def calculate_score(data: list) -> int:
         logger.warning(f"Feil i calculate_score: {e}")
         return 50
 
-
 def log_signal_to_history(result: dict):
     history = []
     if HISTORY_FILE.exists():
@@ -50,7 +49,10 @@ def log_signal_to_history(result: dict):
 
 
 async def analyze_signals(symbol: str) -> dict:
-    data = await fetch_historical_data_for_training(symbol)
+    try:
+        data = await fetch_historical_data_for_training(symbol)
+    except NotImplementedError:
+        data = []
 
     if not data or len(data) < 2:
         price_now = await fetch_realtime_price(symbol)
