@@ -1,70 +1,76 @@
-import numpy as np
+import json
 import logging
+from datetime import datetime
+from pathlib import Path
+import numpy as np
+from data_collector import fetch_historical_data_for_training, fetch_realtime_price
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
-def analyze_signals(prices: list, coin: str):
-    if not prices or len(prices) < 48:
-        logger.warning(f"Not enough data to analyze {coin}")
-        return 0, "❌ Not enough data"
+CACHE_PATH = Path("cache")
+CACHE_PATH.mkdir(exist_ok=True)
 
-    if not all(isinstance(p, dict) and "price" in p for p in prices):
-        logger.error(f"Malformed price data for {coin}!")
-        return 0, "❌ Invalid price format"
 
+def calculate_score(data: list) -> int:
     try:
-        prices_array = np.array([p["price"] for p in prices[-48:]])
+        prices = [price for _, price in data if price > 0]
+        if len(prices) < 2:
+            return 50
 
-        # Prisendringer
-        change_24h = (prices_array[-1] - prices_array[0]) / prices_array[0] * 100
-        change_6h = (prices_array[-1] - prices_array[-7]) / prices_array[-7] * 100
-        change_1h = (prices_array[-1] - prices_array[-2]) / prices_array[-2] * 100
+        returns = np.diff(prices) / prices[:-1] * 100
+        avg_return = np.mean(returns)
 
-        # Score-beregning
-        score = 0
-        if change_24h > 3:
-            score += 30
-        if change_6h > 1:
-            score += 25
-        if change_1h > 0.5:
-            score += 25
-
-        # Volatilitet
-        volatility = np.std(prices_array[-12:])
-        if volatility < 0.01:
-            score -= 20
-            vol_text = "🔸 Low volatility"
-        else:
-            score += 10
-            vol_text = "📈 Normal volatility"
-
-        # Trendmomentum
-        momentum = prices_array[-1] - np.mean(prices_array[-12:])
-        if momentum > 0:
-            score += 5
-            trend_text = "📈 Oppadgående momentum"
-        else:
-            trend_text = "➖ Ingen momentumbonus"
-
-        # Glidende snitt trend
-        ma_24 = np.mean(prices_array[-24:])
-        ma_48 = np.mean(prices_array)
-        if ma_24 > ma_48:
-            score += 5
-            sma_text = "🟢 Kort trend over lang trend"
-        else:
-            sma_text = "🔸 Kort trend under lang trend"
-
-        # Sammensatt Telegram-detaljtekst
-        details = (
-            f"24h: {change_24h:.2f}%, 6h: {change_6h:.2f}%, 1h: {change_1h:.2f}%\n"
-            f"{vol_text} | {trend_text} | {sma_text}\n"
-            f"📊 Basisscore: {score}/100 (uten boosters)"
-        )
-
-        logger.info(f"{coin.upper()} → Score: {score}, Volatility: {volatility:.5f}, Momentum: {momentum:.4f}")
-        return score, details
-
+        score = int(min(max(avg_return, -50), 50) + 50)
+        return score
     except Exception as e:
-        logger.exception(f"Error analyzing {coin}: {e}")
-        return 0, "❌ Error in analysis"
+        logger.warning(f"Feil i calculate_score: {e}")
+        return 50
+
+
+async def analyze_signals(symbol: str) -> dict:
+    data = await fetch_historical_data_for_training(symbol)
+
+    if not data or len(data) < 2:
+        price_now = await fetch_realtime_price(symbol)
+        cache_file = CACHE_PATH / f"{symbol}_last_price.json"
+
+        last_price = 0.0
+        if cache_file.exists():
+            try:
+                with cache_file.open("r") as f:
+                    cached = json.load(f)
+                    last_price = cached.get("price", 0.0)
+            except Exception as e:
+                logger.warning(f"Kunne ikke lese cache for {symbol}: {e}")
+
+        if last_price:
+            change_pct = (price_now - last_price) / last_price * 100
+            score = int(min(max(change_pct, -50), 50) + 50)
+        else:
+            score = 50
+
+        try:
+            with cache_file.open("w") as f:
+                json.dump({"price": price_now, "timestamp": datetime.utcnow().isoformat()}, f)
+        except Exception as e:
+            logger.warning(f"Kunne ikke skrive cache for {symbol}: {e}")
+
+        logger.info(f"🟡 {symbol.upper()} fallback-score basert på sanntidspris: {score}")
+        return {
+            "symbol": symbol,
+            "score": score,
+            "note": "fallback",
+            "price": price_now,
+            "change": round(change_pct, 2) if last_price else 0
+        }
+
+    score = calculate_score(data)
+    logger.info(f"🟢 {symbol.upper()} full analyse-score: {score}")
+    return {
+        "symbol": symbol,
+        "score": score,
+        "note": "historical",
+        "price": data[-1][1] if data else 0.0,
+        "change": 0.0
+    }
