@@ -3,7 +3,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 import numpy as np
-from data_collector import fetch_historical_data_for_training, fetch_realtime_price
+from data_collector import fetch_historical_data_for_training
+from price_tracker import fetch_realtime_price  # Flyttet hit for klarhet
 from notifier import send_telegram_alert  # Ny integrasjon
 
 logger = logging.getLogger(__name__)
