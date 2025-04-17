@@ -1,7 +1,9 @@
 import aiohttp
 import logging
 import os
+import json
 from datetime import datetime
+from pathlib import Path
 from dotenv import load_dotenv
 
 # Setup logging
@@ -22,6 +24,9 @@ COIN_ID_OVERRIDES = {
     "binancecoin": "BNB",
     # legg til flere hvis nødvendig
 }
+
+CACHE_PATH = Path("cache")
+CACHE_PATH.mkdir(exist_ok=True)
 
 async def fetch_top_coins(limit: int = None) -> list:
     try:
@@ -58,6 +63,22 @@ async def fetch_top_coins(limit: int = None) -> list:
         return []
 
 async def fetch_historical_data_for_training(coin_symbol: str, days: int = 2) -> list:
-    # ⚠️ CoinMarketCap free tier gir ikke lett tilgang til historiske prisdata – placeholder funksjon for fremtidig implementering
+    # CoinMarketCap tilbyr ikke historiske data på gratisnivå, så vi cacher tomme data
     logger.warning(f"fetch_historical_data_for_training ikke støttet for symbol '{coin_symbol}' med gratis CoinMarketCap API.")
-    return []
+
+    cache_file = CACHE_PATH / f"{coin_symbol}_historical.json"
+    if cache_file.exists():
+        try:
+            with cache_file.open("r") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"Kunne ikke lese fra cache for {coin_symbol}: {e}")
+
+    dummy_data = [(datetime.utcnow().isoformat(), 0.0)]
+    try:
+        with cache_file.open("w") as f:
+            json.dump(dummy_data, f)
+    except Exception as e:
+        logger.warning(f"Kunne ikke skrive til cache for {coin_symbol}: {e}")
+
+    return dummy_data
