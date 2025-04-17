@@ -1,31 +1,37 @@
 import logging
-import numpy as np
+from datetime import datetime
+from statistics import mean
 
 logger = logging.getLogger(__name__)
 
-# Enkel sanntids scoringsmodell basert på prisdynamikk (placeholder)
-def analyze_signals(data: list, coin_name: str):
+def analyze_signals_realtime(price_info: dict, symbol: str):
+    """
+    Ekstrem enkel analyse: Ser på endringer over tid (fra cache).
+    Score beregnes basert på prosentvis vekst siste minutter.
+    """
+    history = price_info.get("cached", [])
+    current_price = price_info.get("price")
+    now = datetime.utcnow()
+
+    if not history or len(history) < 3:
+        logger.warning(f"Not enough price history for {symbol}")
+        return 0, "📉 For lite data for sanntidsanalyse"
+
     try:
-        if not data or len(data) < 3:
-            logger.warning(f"Not enough data to analyze {coin_name}")
-            return 0, "❌ Not enough data"
+        # Tar de siste 3 prisene og regner ut snitt
+        values = [entry["price"] for entry in history[-3:]]
+        avg_price = mean(values)
+        change_pct = ((current_price - avg_price) / avg_price) * 100
 
-        prices = np.array([price for _, price in data])
-        momentum = (prices[-1] - prices[0]) / prices[0]
-        score = min(max(int(momentum * 100), 0), 100)
+        score = min(max(int(change_pct * 5), 0), 100)
 
-        summary = f"📊 Prisendring: {momentum:.2%}\n"
-        summary += f"📍 Pris start: {prices[0]:.2f} → Slutt: {prices[-1]:.2f}\n"
-
-        if score >= 70:
-            summary += "🚀 Momentum ser sterkt ut!"
-        elif score >= 50:
-            summary += "📈 Positiv trend observert."
-        else:
-            summary += "🔍 Svak eller ingen tydelig oppgang."
-
-        return score, summary
+        message = (
+            f"💰 Nå: ${current_price:.4f}\n"
+            f"📊 Snitt (siste 3): ${avg_price:.4f}\n"
+            f"📈 Endring: {change_pct:.2f}%"
+        )
+        return score, message
 
     except Exception as e:
-        logger.error(f"analyse_signals-feil for {coin_name}: {e}")
-        return 0, "❌ Analysefeil"
+        logger.error(f"❌ Error i analyze_signals_realtime({symbol}): {e}")
+        return 0, "⚠️ Analysefeil"
