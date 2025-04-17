@@ -24,7 +24,15 @@ async def run_realtime_scan():
     )
 
     coin_limit = int(os.getenv("COIN_LIMIT", 20))
-    coins = await fetch_top_coins(limit=coin_limit)
+    try:
+        coins = await fetch_top_coins(limit=coin_limit)
+    except Exception as e:
+        logger.warning(f"❌ Klarte ikke hente topp coins, bruker fallback: {e}")
+        coins = [
+            "btc", "eth", "usdt", "xrp", "bnb", "sol", "ada", "doge", "dot", "matic",
+            "shib", "ltc", "uni", "link", "atom", "avax", "xmr", "bch", "trx", "apt"
+        ]
+
     logger.info(f"Hentet topp {len(coins)} coins: {coins}")
 
     valid_signals = []
