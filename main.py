@@ -7,7 +7,7 @@ from datetime import datetime
 from telegram_handler import send_telegram_message
 from data_collector import fetch_top_coins, fetch_historical_data_for_training
 from analyse_motor import analyze_signals
-from whale_tracker import run_whale_tracker  # 🐋 Whale-analyse
+# from whale_tracker import run_whale_tracker  # 🐋 Midlertidig deaktivert
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -40,7 +40,7 @@ async def run_signal_scan():
 
     if not valid_signals:
         logger.info("Ingen signaler over terskelen ble funnet.")
-        await send_telegram_message("📭 *Ingen kjøpssignaler funnet i denne scanningen.*")
+        await send_telegram_message("📜 *Ingen kjøpssignaler funnet i denne scanningen.*")
         return
 
     valid_signals.sort(key=lambda x: x[1], reverse=True)
@@ -51,12 +51,9 @@ async def run_signal_scan():
         message += details
         await send_telegram_message(message)
 
-# Kjør både signal-scan og whale-tracking samtidig
+# Kun signal-scan aktivert
 async def main():
-    await asyncio.gather(
-        run_signal_scan(),
-        run_whale_tracker()
-    )
+    await run_signal_scan()
 
 if __name__ == "__main__":
     asyncio.run(main())
