@@ -17,11 +17,7 @@ logger = logging.getLogger(__name__)
 async def run_realtime_scan():
     logger.info("🚀 Starter sanntidsscan (kun prisbasert)")
 
-    await send_telegram_message(
-        f"⚡ *Sanntidsscan startet!*\n"
-        f"🕒 {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC\n"
-        "🤖 MenBreakthrough AI-Bot overvåker markedet live!"
-    )
+    # Ikke send Telegram-melding ved hver scan – kun ved funn
 
     coin_limit = min(int(os.getenv("COIN_LIMIT", 20)), 25)  # Begrens midlertidig for å unngå 429
     try:
@@ -59,7 +55,7 @@ async def run_realtime_scan():
 
     if not valid_signals:
         logger.info("Ingen sterke bevegelser funnet.")
-        await send_telegram_message("📭 *Ingen prisbaserte signaler funnet akkurat nå.*")
+        # Ikke send Telegram-varsel ved null funn
     else:
         valid_signals.sort(key=lambda x: x[1], reverse=True)
         for coin, score, details in valid_signals[:10]:
