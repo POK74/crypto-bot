@@ -23,7 +23,7 @@ async def run_realtime_scan():
         "🤖 MenBreakthrough AI-Bot overvåker markedet live!"
     )
 
-    coin_limit = int(os.getenv("COIN_LIMIT", 20))
+    coin_limit = min(int(os.getenv("COIN_LIMIT", 20)), 25)  # Begrens midlertidig for å unngå 429
     try:
         coins = await fetch_top_coins(limit=coin_limit)
     except Exception as e:
