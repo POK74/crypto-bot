@@ -1,34 +1,44 @@
 import os
 import logging
 import aiohttp
+from dotenv import load_dotenv
 
-# Hent Telegram API-data fra miljøvariabler
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+load_dotenv()
 
-# Sjekk at begge finnes, ellers stopp
-if not TOKEN or not CHAT_ID:
-    error_msg = "Environment variables TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set"
-    logging.error(error_msg)
-    raise RuntimeError(error_msg)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
-# Telegram API URL
-API_URL = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# Asynkron sendefunksjon
-async def send_message(text: str):
-    data = {
-        "chat_id": CHAT_ID,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
+API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+
+async def send_telegram_alert(signal: dict):
     try:
+        symbol = signal.get("symbol", "?").upper()
+        score = signal.get("score", 0)
+        note = signal.get("note", "")
+        price = signal.get("price", 0)
+        change = signal.get("change", 0)
+
+        message = (
+            f"\u26a1 Signal Alert: *{symbol}*\n"
+            f"Score: *{score}/100* ({note})\n"
+            f"Price: ${price:.4f}\n"
+            f"24h Change: {change:.2f}%"
+        )
+
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": message,
+            "parse_mode": "Markdown"
+        }
+
         async with aiohttp.ClientSession() as session:
-            async with session.post(API_URL, data=data) as resp:
+            async with session.post(API_URL, json=payload) as resp:
                 if resp.status != 200:
-                    error_text = await resp.text()
-                    logging.error(f"Failed to send Telegram message. Status code: {resp.status}, response: {error_text}")
+                    logger.warning(f"Telegram-feil ({resp.status}): {await resp.text()}")
                 else:
-                    logging.info(f"Telegram message sent successfully: {text}")
+                    logger.info(f"Telegram-varsling sendt for {symbol}")
     except Exception as e:
-        logging.error(f"Error sending message to Telegram: {e}")
+        logger.error(f"Feil i send_telegram_alert: {e}")
