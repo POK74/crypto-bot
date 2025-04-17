@@ -1,35 +1,63 @@
-import json
+import asyncio
+import logging
 import os
+from dotenv import load_dotenv
 from datetime import datetime
-from pathlib import Path
 
-PRICE_CACHE_FILE = Path("cache/price_cache.json")
-PRICE_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+from telegram_handler import send_telegram_message
+from data_collector import fetch_top_coins
+from price_tracker import fetch_realtime_price
+from analyse_motor import analyze_signals_realtime
 
-def load_price_cache() -> dict:
-    if not PRICE_CACHE_FILE.exists():
-        return {}
-    try:
-        with open(PRICE_CACHE_FILE, "r") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+load_dotenv()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def save_price_cache(cache: dict) -> None:
-    try:
-        with open(PRICE_CACHE_FILE, "w") as f:
-            json.dump(cache, f, indent=2)
-    except Exception as e:
-        print(f"Feil ved lagring av pris-cache: {e}")
+# Asynkron hovedmotor for sanntidssignaler
+async def run_realtime_scan():
+    logger.info("🚀 Starter sanntidsscan (kun prisbasert)")
 
-def update_price_in_cache(cache: dict, symbol: str, price: float) -> dict:
-    timestamp = datetime.utcnow().isoformat()
-    if symbol not in cache:
-        cache[symbol] = []
-    cache[symbol].append({"timestamp": timestamp, "price": price})
+    await send_telegram_message(
+        f"⚡ *Sanntidsscan startet!*\n"
+        f"🕒 {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC\n"
+        "🤖 MenBreakthrough AI-Bot overvåker markedet live!"
+    )
 
-    # Behold bare de siste 100 datapunktene per coin
-    if len(cache[symbol]) > 100:
-        cache[symbol] = cache[symbol][-100:]
+    coin_limit = int(os.getenv("COIN_LIMIT", 20))
+    coins = await fetch_top_coins(limit=coin_limit)
+    logger.info(f"Hentet topp {len(coins)} coins: {coins}")
 
-    return cache
+    valid_signals = []
+
+    for coin in coins:
+        price_info = await fetch_realtime_price(coin)
+        if not price_info:
+            logger.warning(f"Mangler sanntidsdata for {coin}, hopper over.")
+            continue
+
+        score, details = analyze_signals_realtime(price_info, coin)
+
+        logger.info(f"{coin.upper()} - score: {score} – detaljer: {details}")
+
+        if score >= 70:
+            valid_signals.append((coin, score, details))
+
+    if not valid_signals:
+        logger.info("Ingen sterke bevegelser funnet.")
+        await send_telegram_message("📭 *Ingen prisbaserte signaler funnet akkurat nå.*")
+        return
+
+    valid_signals.sort(key=lambda x: x[1], reverse=True)
+
+    for coin, score, details in valid_signals[:10]:
+        message = f"📈 *PRISVARSEL* - {coin.upper()}/USDT\n"
+        message += f"🔥 Endring-score: *{score}*\n"
+        message += details
+        await send_telegram_message(message)
+
+# Start kun sanntids-scan
+async def main():
+    await run_realtime_scan()
+
+if __name__ == "__main__":
+    asyncio.run(main())
