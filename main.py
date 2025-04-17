@@ -18,10 +18,10 @@ async def run_realtime_scan():
     logger.info("🚀 Starter sanntidsscan (kun prisbasert)")
 
     await send_telegram_message(
-    f"⚡ *Sanntidsscan startet!*\n"
-    f"🕒 {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC\n"
-    "🤖 MenBreakthrough AI-Bot overvåker markedet live!"
-)
+        f"⚡ *Sanntidsscan startet!*\n"
+        f"🕒 {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC\n"
+        "🤖 MenBreakthrough AI-Bot overvåker markedet live!"
+    )
 
     coin_limit = int(os.getenv("COIN_LIMIT", 20))
     coins = await fetch_top_coins(limit=coin_limit)
