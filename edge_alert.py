@@ -1,5 +1,6 @@
 import asyncio
 import os
+import time
 import yfinance as yf
 import pandas as pd
 from dotenv import load_dotenv
@@ -14,10 +15,12 @@ bot = Bot(token=BOT_TOKEN)
 
 COINS = ["TRUMP-USD", "BTC-USD", "ETC-USD", "BONK-USD", "ADA-USD", "AST-USD", "SHIB-USD", "SOL-USD"]
 
-
 def analyse_coin(coin):
+    start_time = time.time()
+
     df = yf.download(coin, interval="15m", period="1d")
     if df.empty or len(df) < 50:
+        print(f"⚠️ {coin} mangler data eller for lite data.")
         return None
 
     df["EMA21"] = df["Close"].ewm(span=21).mean()
@@ -35,6 +38,9 @@ def analyse_coin(coin):
     rsi_strong = last["RSI"] > 70
     volume_valid = last["Volume"] > last["Volume_SMA"]
 
+    elapsed = time.time() - start_time
+    print(f"⏱️ Ferdig med {coin}: {elapsed:.2f} sekunder")
+
     if trend == "Bullish" and macd_cross and rsi_strong and volume_valid:
         entry = round(last["Close"], 8)
         sl = round(last["EMA21"] * 0.98, 8)
@@ -42,7 +48,7 @@ def analyse_coin(coin):
 
         risk_reward_ratio = (target - entry) / (entry - sl) if (entry - sl) != 0 else 0
         if risk_reward_ratio < 2:
-            return None  # Ikke send signal hvis Risk/Reward er dårlig
+            return None
 
         melding = f"""
 📊 [EDGE SIGNAL] {coin.replace("-USD", "-USDT")}
@@ -56,12 +62,11 @@ def analyse_coin(coin):
 🛡️ SL: {sl}
 🏁 Target: {target}
 
-🧠 Kommentar: Kjøpssignal trigget med høy RSI + MACD + volumbekreftelse. Vurder inngang kun med støtte i trend.
+🧐 Kommentar: Kjøpssignal trigget med høy RSI + MACD + volumbekreftelse. Vurder inngang kun med støtte i trend.
 """
         return melding.strip()
 
     return None
-
 
 def compute_rsi(series, period=14):
     delta = series.diff()
@@ -76,7 +81,6 @@ async def sjekk_edge_signaler():
         melding = analyse_coin(coin)
         if melding:
             await bot.send_message(chat_id=CHAT_ID, text=melding)
-
 
 if __name__ == "__main__":
     asyncio.run(sjekk_edge_signaler())
