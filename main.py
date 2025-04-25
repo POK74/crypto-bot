@@ -1,28 +1,27 @@
-import asyncio
-import logging
-from analyse_motor import analyser_alle_coins
-from telegram_handler import notify_signal
-from datetime import datetime
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from analyse_motor import hent_indikatorer
+from notifier import send_telegram_melding
 
-async def main():
-    start_tid = datetime.now()
-    logger.info(f"\n🟢 Starter analyseklokke: {start_tid.strftime('%Y-%m-%d %H:%M:%S')}\n")
+TOKEN = "DIN_BOT_TOKEN_HER"
 
-    try:
-        signal_summary = await analyser_alle_coins()
+async def analyse(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Skriv en ticker, f.eks: /analyse BONK-USD")
+        return
 
-        # Kun send signal hvis det er et faktisk kjøpssignal
-        await notify_signal(signal_summary)
+    ticker = context.args[0]
+    data = hent_indikatorer(ticker)
+    if not data:
+        await update.message.reply_text("Feil ved henting av data.")
+        return
 
-    except Exception as e:
-        logger.exception(f"❌ Uventet feil i hovedprosessen: {e}")
+    melding = f"Analyse for {ticker}\nRSI: {data['RSI']}\nEMA9: {data['EMA9']}\nMACD: {data['MACD']}\nATR: {data['ATR']}"
+    await update.message.reply_text(melding)
 
-    slutt_tid = datetime.now()
-    tid_brukt = (slutt_tid - start_tid).total_seconds()
-    logger.info(f"🕒 Analyse fullført på {tid_brukt:.2f} sekunder.")
+app = ApplicationBuilder().token(TOKEN).build()
+app.add_handler(CommandHandler("analyse", analyse))
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    app.run_polling()
