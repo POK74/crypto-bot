@@ -8,7 +8,7 @@ def hent_indikatorer(ticker):
         return None
 
     df = data.copy()
-    df["RSI"] = ta.momentum.RSIIndicator(df["Close"]).rsi()
+    df["RSI"] = ta.momentum.RSIIndicator(df["Close"].squeeze()).rsi()
     df["EMA9"] = ta.trend.EMAIndicator(df["Close"], window=9).ema_indicator()
     df["MACD"] = ta.trend.MACD(df["Close"]).macd_diff()
     df["ATR"] = ta.volatility.AverageTrueRange(high=df["High"], low=df["Low"], close=df["Close"]).average_true_range()
