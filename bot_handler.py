@@ -1,8 +1,10 @@
 
 import os
-from telegram import Update
+from telegram import Update, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from analyse_motor import hent_indikatorer
+from formatter import tolk_trend, vurder_momentum, vurder_volume, vurder_risk_reward, konklusjon_short_mid, anbefalt_strategi
+from img_generator import lag_analysebilde
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,64 +14,49 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 async def analyse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("Skriv en ticker, f.eks: /analyse BONK")
+        await update.message.reply_text("⚠️ Skriv et coin, f.eks. /analyse BONK")
         return
 
     ticker = context.args[0].upper()
     data = hent_indikatorer(ticker)
     if not data:
-        await update.message.reply_text("⚠️ Feil ved henting av data.")
+        await update.message.reply_text("🚨 Feil: Kunne ikke hente data for coin.")
         return
 
     ind15 = data["indikatorer_15m"]
     ind1h = data["indikatorer_1h"]
 
+    trend = tolk_trend(ind1h["EMA9"], ind1h["EMA21"], ind1h["EMA50"], ind1h["EMA200"])
+    moment = vurder_momentum(ind15["RSI"], ind15["MACD"])
+    volume = vurder_volume(ind15["Volume"], ind15["Volume_SMA"])
+    risk = vurder_risk_reward(ind15["ATR"], ind15["BB_upper"], ind15["BB_lower"])
+    short, mid = konklusjon_short_mid(ind15["RSI"], ind15["STOCHRSI"], ind15["ADX"])
+    strategi = anbefalt_strategi(short)
+
     melding = f"""
 📊 Teknisk analyse for {ticker}
-——— 15 Minutter ———
-• RSI: {ind15['RSI']}
-• StochRSI: {ind15['STOCHRSI']}
-• EMA9: {ind15['EMA9']}
-• EMA21: {ind15['EMA21']}
-• EMA50: {ind15['EMA50']}
-• EMA200: {ind15['EMA200']}
-• MACD: {ind15['MACD']}
-• ATR: {ind15['ATR']}
-• ADX: {ind15['ADX']}
-• Bollinger: {ind15['BB_lower']} – {ind15['BB_upper']}
-• Volume: {ind15['Volume']} / {ind15['Volume_SMA']}
-
-——— 1 Time ———
-• RSI: {ind1h['RSI']}
-• StochRSI: {ind1h['STOCHRSI']}
-• EMA9: {ind1h['EMA9']}
-• EMA21: {ind1h['EMA21']}
-• EMA50: {ind1h['EMA50']}
-• EMA200: {ind1h['EMA200']}
-• MACD: {ind1h['MACD']}
-• ATR: {ind1h['ATR']}
-• ADX: {ind1h['ADX']}
-• Bollinger: {ind1h['BB_lower']} – {ind1h['BB_upper']}
-• Volume: {ind1h['Volume']} / {ind1h['Volume_SMA']}
 
 ✅ Oppsummert analyse
-• Trendretning: [Automatisk tolkning her]
-• Momentum: [basert på RSI, MACD]
-• Volume behavior: [volum vs. snitt]
-• Risk/Reward: [ATR, BB avstand]
+• Trendretning: {trend}
+• Momentum: {moment}
+• Volume behavior: {volume}
+• Risk/Reward: {risk}
 
 📈 Konklusjon:
 Sjanse for breakout/reversal:
-• 🔵 Short-term (1–8t): 75%
-• 🟢 Mid-term (1–2d): 80%
+• 🔵 Short-term (1–8t): {short}%
+• 🟢 Mid-term (1–2d): {mid}%
 
 📌 Anbefalt strategi:
-• Entry: Vent på EMA9 kryss
-• SL: Under EMA21 / BB-lower
-• Target: Nær BB-upper / RSI 70
-• Kommentar: [AI-vurdering her]
+• {strategi}
+• Kommentar: Automatisk vurdert basert på indikatorer
 """
+
+    bilde_path = lag_analysebilde(ticker, ind15, ind1h)
+
     await update.message.reply_text(melding)
+    with open(bilde_path, "rb") as img:
+        await update.message.reply_photo(InputFile(img))
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(CommandHandler("analyse", analyse))
