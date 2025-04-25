@@ -1,14 +1,33 @@
-
 import yfinance as yf
 import ta
 import pandas as pd
 
 def hent_indikatorer(ticker):
     try:
-        df15 = yf.download(ticker, interval="15m", period="2d")
-        df1h = yf.download(ticker, interval="60m", period="7d")
+        ticker = ticker.upper()
+        print(f"\n🔹 Ticker mottatt: {ticker}")
+
+        # Last ned data
+        df15 = yf.download(ticker, interval="15m", period="2d").squeeze()
+        df1h = yf.download(ticker, interval="60m", period="7d").squeeze()
+
+        # Hvis MultiIndex: flate ut
+        if isinstance(df15.columns, pd.MultiIndex):
+            df15.columns = df15.columns.get_level_values(0)
+        if isinstance(df1h.columns, pd.MultiIndex):
+            df1h.columns = df1h.columns.get_level_values(0)
+
+        print("\U0001f4c1 15m-data head:")
+        print(df15.head())
+        print("\U0001f4c1 1H-data head:")
+        print(df1h.head())
 
         if df15.empty or df1h.empty:
+            return None
+
+        # Sjekk for NaN
+        if df15.isnull().values.any() or df1h.isnull().values.any():
+            print("[Advarsel] Manglende data i DF")
             return None
 
         # 15m indikatorer
@@ -26,7 +45,7 @@ def hent_indikatorer(ticker):
         df15["BB_lower"] = bb15.bollinger_lband()
         df15["Volume_SMA"] = df15["Volume"].rolling(window=20).mean()
 
-        # 1H indikatorer
+        # 1h indikatorer
         df1h["EMA9"] = ta.trend.EMAIndicator(df1h["Close"], window=9).ema_indicator()
         df1h["EMA21"] = ta.trend.EMAIndicator(df1h["Close"], window=21).ema_indicator()
         df1h["EMA50"] = ta.trend.EMAIndicator(df1h["Close"], window=50).ema_indicator()
