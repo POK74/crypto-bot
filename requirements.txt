@@ -1,5 +1,4 @@
-aiohttp==3.8.5
-ccxt==4.1.94
-python-dotenv==1.0.1
-numpy==2.2.0
-beautifulsoup4==4.12.3
+python-telegram-bot==20.3
+yfinance
+pandas
+ta
