@@ -16,11 +16,8 @@ bot = Bot(token=BOT_TOKEN)
 COINS = ["TRUMP-USD", "BTC-USD", "ETC-USD", "BONK-USD", "ADA-USD", "AST-USD", "SHIB-USD", "SOL-USD"]
 
 def analyse_coin(coin):
-    start_time = time.time()
-
     df = yf.download(coin, interval="15m", period="1d")
     if df.empty or len(df) < 50:
-        print(f"⚠️ {coin} mangler data eller for lite data.")
         return None
 
     df["EMA21"] = df["Close"].ewm(span=21).mean()
@@ -37,9 +34,6 @@ def analyse_coin(coin):
     macd_cross = last["MACD"] > last["Signal"]
     rsi_strong = last["RSI"] > 70
     volume_valid = last["Volume"] > last["Volume_SMA"]
-
-    elapsed = time.time() - start_time
-    print(f"⏱️ Ferdig med {coin}: {elapsed:.2f} sekunder")
 
     if trend == "Bullish" and macd_cross and rsi_strong and volume_valid:
         entry = round(last["Close"], 8)
@@ -62,7 +56,7 @@ def analyse_coin(coin):
 🛡️ SL: {sl}
 🏁 Target: {target}
 
-🧐 Kommentar: Kjøpssignal trigget med høy RSI + MACD + volumbekreftelse. Vurder inngang kun med støtte i trend.
+🧠 Kommentar: Kjøpssignal trigget med høy RSI + MACD + volumbekreftelse. Vurder inngang kun med støtte i trend.
 """
         return melding.strip()
 
@@ -75,12 +69,20 @@ def compute_rsi(series, period=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-
 async def sjekk_edge_signaler():
+    total_start = time.time()
+    antall_signal = 0
     for coin in COINS:
+        start = time.time()
         melding = analyse_coin(coin)
+        elapsed = time.time() - start
+        print(f"⏱️ Ferdig analyse for {coin} på {elapsed:.2f} sekunder.")
         if melding:
             await bot.send_message(chat_id=CHAT_ID, text=melding)
+            antall_signal += 1
+    total_elapsed = time.time() - total_start
+    oppsummering = f"\n\n🚀 Ferdig!\nAnalysert {len(COINS)} coins på {total_elapsed:.2f} sekunder.\nFant {antall_signal} signaler."
+    await bot.send_message(chat_id=CHAT_ID, text=oppsummering)
 
 if __name__ == "__main__":
     asyncio.run(sjekk_edge_signaler())
