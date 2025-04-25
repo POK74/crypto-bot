@@ -58,11 +58,11 @@ def analyse_coin(coin):
 📈 Trend: {trend} (EMA21 > EMA50)
 📊 RSI: {round(last['RSI'], 1)} (overkjøpt)
 💥 MACD: Bullish crossover
-🔊 Volum: {int(last['Volume'])} > SMA={int(last['Volume_SMA'])} (validert)
+🔊 Volum: {int(last['Volume'])} > {int(last['Volume_SMA'])} (validert)
 
-🎯 Entry: {entry}
-🛡️ SL: {sl}
-🏁 Target: {target}
+🎯 Entry: {entry}  
+🛡️ SL: {sl}  
+🏁 Target: {target}  
 
 🧠 Kommentar: Kjøpssignal trigget med høy RSI + MACD + volumbekreftelse. Vurder inngang kun med støtte i trend.
 """
