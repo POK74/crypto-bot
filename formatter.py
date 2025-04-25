@@ -109,8 +109,3 @@ def utvidet_formatter_output(ticker, ind15, ind1h, df15, trend, momentum, volume
 • Kommentar: {strategi}
 """
 ---
-
-✅ Klar for å lime inn nå i `formatter.py`!
-
-Vil du sende meg `notifier.py` neste? 🚀  
-(Så tar vi hele ryddingen på en smell!)
