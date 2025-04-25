@@ -51,7 +51,8 @@ def analyse_coin(coin):
     if trend == "Bullish" and macd_cross and rsi_strong and volume_valid:
         entry = round(float(last["Close"].item()), 8)
         sl = round(float(last["EMA21"].item()) * 0.98, 8)
-        target = round(float(last["EMA200"].item()) if not pd.isna(last["EMA200"]) else entry * 1.1, 8)
+        ema200_val = float(last["EMA200"].item())
+target = round(ema200_val if not pd.isna(ema200_val) else entry * 1.1, 8)
 
         risk_reward_ratio = (target - entry) / (entry - sl) if (entry - sl) != 0 else 0
         if risk_reward_ratio < 2:
