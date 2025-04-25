@@ -8,6 +8,15 @@ logs/
 *.log
 volume_cache.json
 signal_history.json
+price_cache.json
+cache/*.json
+bnb_historical.json
+btc_historical.json
+eth_historical.json
+usdt_historical.json
+xrp_historical.json
+analysis_output.json
+telegram_log.txt
 
 # Environment
 .env
