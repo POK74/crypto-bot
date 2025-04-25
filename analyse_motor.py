@@ -1,37 +1,22 @@
-import logging
-from datetime import datetime
-from statistics import mean
 
-logger = logging.getLogger(__name__)
+import ta
+import yfinance as yf
 
-def analyze_signals_realtime(price_info: dict, symbol: str):
-    """
-    Ekstrem enkel analyse: Ser på endringer over tid (fra cache).
-    Score beregnes basert på prosentvis vekst siste minutter.
-    """
-    history = price_info.get("cached", [])
-    current_price = price_info.get("price")
-    now = datetime.utcnow()
+def hent_indikatorer(ticker):
+    data = yf.download(ticker, interval="15m", period="2d")
+    if data.empty:
+        return None
 
-    if not history or len(history) < 3:
-        logger.warning(f"Not enough price history for {symbol}")
-        return 0, "📉 For lite data for sanntidsanalyse"
+    df = data.copy()
+    df["RSI"] = ta.momentum.RSIIndicator(df["Close"]).rsi()
+    df["EMA9"] = ta.trend.EMAIndicator(df["Close"], window=9).ema_indicator()
+    df["MACD"] = ta.trend.MACD(df["Close"]).macd_diff()
+    df["ATR"] = ta.volatility.AverageTrueRange(high=df["High"], low=df["Low"], close=df["Close"]).average_true_range()
 
-    try:
-        # Tar de siste 3 prisene og regner ut snitt
-        values = [entry["price"] for entry in history[-3:]]
-        avg_price = mean(values)
-        change_pct = ((current_price - avg_price) / avg_price) * 100
-
-        score = min(max(int(change_pct * 5), 0), 100)
-
-        message = (
-            f"💰 Nå: ${current_price:.4f}\n"
-            f"📊 Snitt (siste 3): ${avg_price:.4f}\n"
-            f"📈 Endring: {change_pct:.2f}%"
-        )
-        return score, message
-
-    except Exception as e:
-        logger.error(f"❌ Error i analyze_signals_realtime({symbol}): {e}")
-        return 0, "⚠️ Analysefeil"
+    siste = df.iloc[-1]
+    return {
+        "RSI": round(siste["RSI"], 2),
+        "EMA9": round(siste["EMA9"], 6),
+        "MACD": round(siste["MACD"], 6),
+        "ATR": round(siste["ATR"], 6)
+    }
