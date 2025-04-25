@@ -15,6 +15,14 @@ bot = Bot(token=BOT_TOKEN)
 
 COINS = ["TRUMP-USD", "BTC-USD", "ETC-USD", "BONK-USD", "ADA-USD", "AST-USD", "SHIB-USD", "SOL-USD"]
 
+SYSTEM_OVERSIKT = """
+🛠️ Systemstatus:
+- 🔵 Edge Bot: Live
+- 🔵 Analyse Bot: Live
+- 🔵 GitHub Synkronisering: OK
+- 🟡 Neste steg: Optimalisere flere coins
+"""
+
 def analyse_coin(coin):
     df = yf.download(coin, interval="15m", period="1d")
     if df.empty or len(df) < 50:
@@ -81,7 +89,7 @@ async def sjekk_edge_signaler():
             await bot.send_message(chat_id=CHAT_ID, text=melding)
             antall_signal += 1
     total_elapsed = time.time() - total_start
-    oppsummering = f"\n\n🚀 Ferdig!\nAnalysert {len(COINS)} coins på {total_elapsed:.2f} sekunder.\nFant {antall_signal} signaler."
+    oppsummering = f"\n\n🚀 Ferdig!\nAnalysert {len(COINS)} coins på {total_elapsed:.2f} sekunder.\nFant {antall_signal} signaler.\n\n{SYSTEM_OVERSIKT}"
     await bot.send_message(chat_id=CHAT_ID, text=oppsummering)
 
 if __name__ == "__main__":
