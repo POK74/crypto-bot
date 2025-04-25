@@ -23,6 +23,8 @@ SYSTEM_OVERSIKT = """
 - 🟡 Neste steg: Optimalisere flere coins
 """
 
+SIGNAL_LOGG = []
+
 def analyse_coin(coin):
     df = yf.download(coin, interval="15m", period="1d")
     if df.empty or len(df) < 50:
@@ -66,6 +68,7 @@ def analyse_coin(coin):
 
 🧠 Kommentar: Kjøpssignal trigget med høy RSI + MACD + volumbekreftelse. Vurder inngang kun med støtte i trend.
 """
+        SIGNAL_LOGG.append(coin.replace("-USD", "-USDT"))
         return melding.strip()
 
     return None
@@ -89,7 +92,14 @@ async def sjekk_edge_signaler():
             await bot.send_message(chat_id=CHAT_ID, text=melding)
             antall_signal += 1
     total_elapsed = time.time() - total_start
-    oppsummering = f"\n\n🚀 Ferdig!\nAnalysert {len(COINS)} coins på {total_elapsed:.2f} sekunder.\nFant {antall_signal} signaler.\n\n{SYSTEM_OVERSIKT}"
+    oppsummering = f"""
+🚀 Ferdig!
+Analysert {len(COINS)} coins på {total_elapsed:.2f} sekunder.
+Fant {antall_signal} signaler.
+Logger: {', '.join(SIGNAL_LOGG)}
+
+{SYSTEM_OVERSIKT}
+"""
     await bot.send_message(chat_id=CHAT_ID, text=oppsummering)
 
 if __name__ == "__main__":
