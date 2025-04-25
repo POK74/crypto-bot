@@ -1,10 +1,9 @@
-import os
 import asyncio
+import os
 import yfinance as yf
 import pandas as pd
-import ta
-from telegram import Bot
 from dotenv import load_dotenv
+from telegram import Bot
 
 load_dotenv()
 
@@ -13,55 +12,71 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 bot = Bot(token=BOT_TOKEN)
 
-# Dine valgte coins
-TICKERS = [
-    "TRUMP-USD",
-    "BTC-USD",
-    "ETC-USD",
-    "BONK-USD",
-    "ADA-USD",
-    "AST-USD",
-    "SHIB-USD",
-    "SOL-USD"
-]
+COINS = ["TRUMP-USD", "BTC-USD", "ETC-USD", "BONK-USD", "ADA-USD", "AST-USD", "SHIB-USD", "SOL-USD"]
+
+
+def analyse_coin(coin):
+    df = yf.download(coin, interval="15m", period="1d")
+    if df.empty or len(df) < 50:
+        return None
+
+    df["EMA21"] = df["Close"].ewm(span=21).mean()
+    df["EMA50"] = df["Close"].ewm(span=50).mean()
+    df["EMA200"] = df["Close"].ewm(span=200).mean()
+    df["RSI"] = compute_rsi(df["Close"], 14)
+    df["MACD"] = df["Close"].ewm(span=12).mean() - df["Close"].ewm(span=26).mean()
+    df["Signal"] = df["MACD"].ewm(span=9).mean()
+    df["Volume_SMA"] = df["Volume"].rolling(window=20).mean()
+
+    last = df.iloc[-1]
+
+    trend = "Bullish" if last["EMA21"] > last["EMA50"] else "Sideways"
+    macd_cross = last["MACD"] > last["Signal"]
+    rsi_strong = last["RSI"] > 70
+    volume_valid = last["Volume"] > last["Volume_SMA"]
+
+    if trend == "Bullish" and macd_cross and rsi_strong and volume_valid:
+        entry = round(last["Close"], 8)
+        sl = round(last["EMA21"] * 0.98, 8)
+        target = round(last["EMA200"], 8) if not pd.isna(last["EMA200"]) else round(entry * 1.1, 8)
+
+        risk_reward_ratio = (target - entry) / (entry - sl) if (entry - sl) != 0 else 0
+        if risk_reward_ratio < 2:
+            return None  # Ikke send signal hvis Risk/Reward er dårlig
+
+        melding = f"""
+📊 [EDGE SIGNAL] {coin.replace("-USD", "-USDT")}
+
+📈 Trend: {trend} (EMA21 > EMA50)
+📊 RSI: {round(last['RSI'], 1)} (overkjøpt)
+💥 MACD: Bullish crossover
+🔊 Volum: {int(last['Volume'])} > SMA={int(last['Volume_SMA'])} (validert)
+
+🎯 Entry: {entry}
+🛡️ SL: {sl}
+🏁 Target: {target}
+
+🧠 Kommentar: Kjøpssignal trigget med høy RSI + MACD + volumbekreftelse. Vurder inngang kun med støtte i trend.
+"""
+        return melding.strip()
+
+    return None
+
+
+def compute_rsi(series, period=14):
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+
 
 async def sjekk_edge_signaler():
-    meldinger = []
-
-    for ticker in TICKERS:
-        try:
-            df = yf.download(ticker, interval="15m", period="2d").squeeze()
-
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
-
-            if df.empty:
-                continue
-
-            close = df["Close"]
-            high = df["High"]
-            low = df["Low"]
-            volume = df["Volume"]
-
-            # Beregn indikatorer
-            rsi = ta.momentum.RSIIndicator(close).rsi().iloc[-1]
-            macd = ta.trend.MACD(close).macd_diff().iloc[-1]
-            volume_sma = volume.rolling(window=20).mean().iloc[-1]
-            latest_volume = volume.iloc[-1]
-
-            # Betingelser for varsel
-            if rsi > 65 and (macd > 0 or latest_volume > volume_sma):
-                meldinger.append(f"📣 {ticker} viser styrke! RSI={rsi:.1f}, MACD={macd:.3f}, Volum={latest_volume:.0f} > SMA={volume_sma:.0f}")
-
-        except Exception as e:
-            print(f"Feil ved behandling av {ticker}: {e}")
-
-    # Send varsler
-    if meldinger:
-        for melding in meldinger:
+    for coin in COINS:
+        melding = analyse_coin(coin)
+        if melding:
             await bot.send_message(chat_id=CHAT_ID, text=melding)
-    else:
-        print("Ingen signaler denne runden.")
+
 
 if __name__ == "__main__":
     asyncio.run(sjekk_edge_signaler())
