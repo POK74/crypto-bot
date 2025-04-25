@@ -43,15 +43,15 @@ def analyse_coin(coin):
 
     last = df.iloc[-1]
 
-    trend = "Bullish" if float(last["EMA21"]) > float(last["EMA50"]) else "Sideways"
-    macd_cross = float(last["MACD"]) > float(last["Signal"])
-    rsi_strong = float(last["RSI"]) > 70
-    volume_valid = float(last["Volume"]) > float(last["Volume_SMA"])
+    trend = "Bullish" if float(last["EMA21"].item()) > float(last["EMA50"].item()) else "Sideways"
+    macd_cross = float(last["MACD"].item()) > float(last["Signal"].item())
+    rsi_strong = float(last["RSI"].item()) > 70
+    volume_valid = float(last["Volume"].item()) > float(last["Volume_SMA"].item())
 
     if trend == "Bullish" and macd_cross and rsi_strong and volume_valid:
-        entry = round(float(last["Close"]), 8)
-        sl = round(float(last["EMA21"]) * 0.98, 8)
-        target = round(float(last["EMA200"]) if not pd.isna(last["EMA200"]) else entry * 1.1, 8)
+        entry = round(float(last["Close"].item()), 8)
+        sl = round(float(last["EMA21"].item()) * 0.98, 8)
+        target = round(float(last["EMA200"].item()) if not pd.isna(last["EMA200"]) else entry * 1.1, 8)
 
         risk_reward_ratio = (target - entry) / (entry - sl) if (entry - sl) != 0 else 0
         if risk_reward_ratio < 2:
@@ -61,9 +61,9 @@ def analyse_coin(coin):
 📊 [EDGE SIGNAL] {coin.replace("-USD", "-USDT")}
 
 📈 Trend: {trend} (EMA21 > EMA50)
-📊 RSI: {round(last['RSI'], 1)} (overkjøpt)
+📊 RSI: {round(last['RSI'].item(), 1)} (overkjøpt)
 💥 MACD: Bullish crossover
-🔊 Volum: {int(last['Volume'])} > {int(last['Volume_SMA'])} (validert)
+🔊 Volum: {int(last['Volume'].item())} > {int(last['Volume_SMA'].item())} (validert)
 
 🎯 Entry: {entry}  
 🛡️ SL: {sl}  
@@ -73,7 +73,7 @@ def analyse_coin(coin):
 """
         SIGNAL_LOGG.append(coin.replace("-USD", "-USDT"))
 
-        # 🗌 Logg til fil
+        # 🔌 Logg til fil
         with open(LOGG_FIL, "a") as f:
             tidspunkt = time.strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"[{tidspunkt}] {coin} | Entry: {entry}, SL: {sl}, Target: {target}\n")
