@@ -4,4 +4,3 @@ ta
 yfinance
 requests
 python-dotenv
-pillow
