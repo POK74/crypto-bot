@@ -108,4 +108,3 @@ def utvidet_formatter_output(ticker, ind15, ind1h, df15, trend, momentum, volume
 {strategi_tekst}
 • Kommentar: {strategi}
 """
----
