@@ -25,6 +25,9 @@ SYSTEM_OVERSIKT = """
 
 SIGNAL_LOGG = []
 
+# Lag loggfil
+LOGG_FIL = "signal_logg.txt"
+
 def analyse_coin(coin):
     df = yf.download(coin, interval="15m", period="1d")
     if df.empty or len(df) < 50:
@@ -69,6 +72,12 @@ def analyse_coin(coin):
 🧠 Kommentar: Kjøpssignal trigget med høy RSI + MACD + volumbekreftelse. Vurder inngang kun med støtte i trend.
 """
         SIGNAL_LOGG.append(coin.replace("-USD", "-USDT"))
+
+        # 📋 Logg til fil
+        with open(LOGG_FIL, "a") as f:
+            tidspunkt = time.strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"[{tidspunkt}] {coin} | Entry: {entry}, SL: {sl}, Target: {target}\n")
+
         return melding.strip()
 
     return None
