@@ -3,43 +3,120 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Caches and logs
-logs/
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff
 *.log
-volume_cache.json
-signal_history.json
-price_cache.json
-cache/*.json
-bnb_historical.json
-btc_historical.json
-eth_historical.json
-usdt_historical.json
-xrp_historical.json
-analysis_output.json
-telegram_log.txt
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
 
-# Environment
-.env
-.env.*
+# Flask stuff
+instance/
+.webassets-cache
 
-# Editor metadata
-.vscode/
-.idea/
+# Scrapy stuff
+.scrapy
 
-# Jupyter / notebooks / dev tools
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
 *.ipynb
 .ipynb_checkpoints/
 
-# Deployment / build artifacts
-*.egg-info/
-dist/
-build/
+# IPython
+profile_default/
+ipython_config.py
 
-# Backup or temp files
-*.bak
-*.tmp
-*~
+# Environments
+.env
+.env.*
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
-# OS files
-.DS_Store
-Thumbs.db
+# Editors
+.vscode/
+.idea/
+.spyderproject
+.spyproject
+.ropeproject
+
+# PDM / Poetry / Pipenv / Pyenv
+.pdm.toml
+__pypackages__/
+#Pipfile.lock
+#poetry.lock
+#pdm.lock
+#.python-version
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# MyPy / Pyre / Type Checkers
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+cython_debug/
+
+# MkDocs
+/site
