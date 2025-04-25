@@ -17,15 +17,17 @@ def hent_indikatorer(ticker):
         if isinstance(df1h.columns, pd.MultiIndex):
             df1h.columns = df1h.columns.get_level_values(0)
 
-        print("\U0001f4c1 15m-data head:")
+        print("📁 15m-data head:")
         print(df15.head())
-        print("\U0001f4c1 1H-data head:")
+        print("📁 1H-data head:")
         print(df1h.head())
 
         if df15.empty or df1h.empty:
+            print(f"🚨 Tomt datasett – sjekk ticker: {ticker}")
+            with open("feil_ticker_logg.txt", "a") as f:
+                f.write(f"{ticker}\n")
             return None
 
-        # Sjekk for NaN
         if df15.isnull().values.any() or df1h.isnull().values.any():
             print("[Advarsel] Manglende data i DF")
             return None
@@ -93,7 +95,8 @@ def hent_indikatorer(ticker):
                 "BB_lower": round(latest_1h["BB_lower"], 6),
                 "Volume": round(latest_1h["Volume"], 0),
                 "Volume_SMA": round(latest_1h["Volume_SMA"], 0)
-            }
+            },
+            "df15": df15
         }
 
     except Exception as e:
