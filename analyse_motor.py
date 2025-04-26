@@ -1,6 +1,7 @@
 import yfinance as yf
 import ta
 import pandas as pd
+import random  # <- Dette er nytt, for å gjøre konklusjonene mer levende
 
 def hent_indikatorer(ticker):
     try:
@@ -11,16 +12,10 @@ def hent_indikatorer(ticker):
         df15 = yf.download(ticker, interval="15m", period="2d").squeeze()
         df1h = yf.download(ticker, interval="60m", period="7d").squeeze()
 
-        # Hvis MultiIndex: flate ut
         if isinstance(df15.columns, pd.MultiIndex):
             df15.columns = df15.columns.get_level_values(0)
         if isinstance(df1h.columns, pd.MultiIndex):
             df1h.columns = df1h.columns.get_level_values(0)
-
-        print("📁 15m-data head:")
-        print(df15.head())
-        print("📁 1H-data head:")
-        print(df1h.head())
 
         if df15.empty or df1h.empty:
             print(f"🚨 Tomt datasett – sjekk ticker: {ticker}")
