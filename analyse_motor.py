@@ -17,11 +17,6 @@ def hent_indikatorer(ticker):
         if isinstance(df1h.columns, pd.MultiIndex):
             df1h.columns = df1h.columns.get_level_values(0)
 
-        print("📁 15m-data head:")
-        print(df15.head())
-        print("📁 1H-data head:")
-        print(df1h.head())
-
         if df15.empty or df1h.empty:
             print(f"🚨 Tomt datasett – sjekk ticker: {ticker}")
             with open("feil_ticker_logg.txt", "a") as f:
