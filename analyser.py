@@ -1,4 +1,4 @@
-# analyser.py (NY FIL)
+# analyser.py
 
 from typing import Dict
 
