@@ -1,7 +1,6 @@
 import yfinance as yf
 import ta
 import pandas as pd
-import random  # <- Dette er nytt, for å gjøre konklusjonene mer levende
 
 def hent_indikatorer(ticker):
     try:
@@ -17,11 +16,9 @@ def hent_indikatorer(ticker):
         if isinstance(df1h.columns, pd.MultiIndex):
             df1h.columns = df1h.columns.get_level_values(0)
 
-        if df15.empty or df1h.empty:
-            print(f"🚨 Tomt datasett – sjekk ticker: {ticker}")
-            with open("feil_ticker_logg.txt", "a") as f:
-                f.write(f"{ticker}\n")
-            return None
+        if df15.empty or df1h.empty or df15["Close"].iloc[-1] == 0 or df1h["Close"].iloc[-1] == 0:
+            print(f"🚨 Ingen pålitelig data for: {ticker}")
+            return {"no_data": True, "ticker": ticker}
 
         if df15.isnull().values.any() or df1h.isnull().values.any():
             print("[Advarsel] Manglende data i DF")
@@ -91,7 +88,8 @@ def hent_indikatorer(ticker):
                 "Volume": round(latest_1h["Volume"], 0),
                 "Volume_SMA": round(latest_1h["Volume_SMA"], 0)
             },
-            "df15": df15
+            "df15": df15,
+            "no_data": False
         }
 
     except Exception as e:
